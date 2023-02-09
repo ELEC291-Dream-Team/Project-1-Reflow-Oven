@@ -59,21 +59,28 @@ bcd: ds 5
 Counter0:    ds 2
 Counter1:    ds 2
 ; parameter variables
-TempSS: ds 2
-TimeSS: ds 2
-TempSE: ds 2
-TimeSE: ds 2
-TempRS: ds 2
-TimeRS: ds 2
-TempRE: ds 2
-TimeRE: ds 2
+TempBCDSS: ds 2
+TimeBCDSS: ds 2
+TempBCDSE: ds 2
+TimeBCDSE: ds 2
+TempBCDRS: ds 2
+TimeBCDRS: ds 2
+TempBCDRE: ds 2
+TimeBCDRE: ds 2
+TempHexSS: ds 2
+TimeHexSS: ds 2
+TempHexSE: ds 2
+TimeHexSE: ds 2
+TempHexRS: ds 2
+TimeHexRS: ds 2
+TempHexRE: ds 2
+TimeHexRE: ds 2
 
 bseg
 ; math32 bit variable
 mf: dbit 1
 
 cseg
-
 ;                      1234567890123456
 Start_display_1:   db '   RIZZOVEN69   ', 0
 Start_display_2:   db 'Press Start     ', 0
@@ -250,21 +257,28 @@ LCDSendString:
 ret
 
 ifPressedJumpTo mac
-    jb %0, %0%1noPress
+    jb %0, %0%1%2noPress
     Wait_Milli_Seconds(#5)
-    jb %0, %0%1noPress
+    jb %0, %0%1%2noPress
     jnb %0, $
     ljmp %1
-    %0%1noPress:
+    %0%1%2noPress:
+endmac
+
+ifNotPressedJumpTo mac
+    jb %0, %1
+    Wait_Milli_Seconds(#5)
+    jb %0, %1
+    jnb %0, $
 endmac
 
 ifPressedCall mac
-    jb %0, %1%0noPress
+    jb %0, %1%0%2noPress
     Wait_Milli_Seconds(#5)
-    jb %0, %1%0noPress
+    jb %0, %1%0%2noPress
     jnb %0, $
     lcall %1
-    %1%0noPress:
+    %1%0%2noPress:
 endmac
 
 Left_blank mac
@@ -333,6 +347,45 @@ reset:
     
     setb EA   ; Enable Global interrupts
 
+    ; initialize values
+    mov TempBCDSS+0, #0x00
+    mov TempBCDSS+1, #0x00
+    mov TimeBCDSS+0, #0x00
+    mov TimeBCDSS+1, #0x00
+    mov TempBCDSE+0, #0x00
+    mov TempBCDSE+1, #0x00
+    mov TimeBCDSE+0, #0x00
+    mov TimeBCDSE+1, #0x00
+    mov TempBCDRS+0, #0x00
+    mov TempBCDRS+1, #0x00
+    mov TimeBCDRS+0, #0x00
+    mov TimeBCDRS+1, #0x00
+    mov TempBCDRE+0, #0x00
+    mov TempBCDRE+1, #0x00
+    mov TimeBCDRE+0, #0x00
+    mov TimeBCDRE+1, #0x00
+    mov TempHexSS+0, #0x00
+    mov TempHexSS+1, #0x00
+    mov TimeHexSS+0, #0x00
+    mov TimeHexSS+1, #0x00
+    mov TempHexSE+0, #0x00
+    mov TempHexSE+1, #0x00
+    mov TimeHexSE+0, #0x00
+    mov TimeHexSE+1, #0x00
+    mov TempHexRS+0, #0x00
+    mov TempHexRS+1, #0x00
+    mov TimeHexRS+0, #0x00
+    mov TimeHexRS+1, #0x00
+    mov TempHexRE+0, #0x00
+    mov TempHexRE+1, #0x00
+    mov TimeHexRE+0, #0x00
+    mov TimeHexRE+1, #0x00
+
+    mov bcd+0, #0x00
+    mov bcd+1, #0x00
+    mov bcd+2, #0x00
+    mov bcd+3, #0x00
+
     lcall InitSPI
     lcall LCD_4BIT
     lcall InitSerialPort
@@ -346,27 +399,85 @@ start:
     WriteCommand(#0x0c) ; hide cursor, no blink
 
     startLoop:
-        ifPressedJumpTo(STARTSTOP, adjSSParameter)
+        ifPressedJumpTo(STARTSTOP, adjSSParameter, 1)
+        ifPressedJumpTo(LEFT, adjSSParameter, 1)
+        ifPressedJumpTo(RIGHT, adjSSParameter, 1)
+        ifPressedJumpTo(UP, adjSSParameter, 1)
+        ifPressedJumpTo(DOWN, adjSSParameter, 1)
     ljmp startLoop
 
 adjSSParameter:
     ; update display
     ; show cursor
     Set_Cursor(1, 1)
-    Send_Constant_String(#SoakS_display1)
+    Send_Constant_String(#SoakS_display_1)
     Set_cursor(2, 1)
-    Send_Constant_String(#SoakS_display2)
+    Send_Constant_String(#SoakS_display_2)
     WriteCommand(#0x0e) ; show cursor, no blink
 
     adjSSParameterLoop100000:
         Set_Cursor(2,5)
-        ifPressedJumpTo(LEFT, start)
-        ifPressedJumpTo(RIGHT, adjSSParameterLoop010000)
-        ifPressedCall(UP, Inc_SS_Temp_100)
-        ifPressedCall(DOWN, Dec_SS_Temp_100)
-        ; update param display
+        ifPressedJumpTo(LEFT, start, 1)
+        ifPressedJumpTo(RIGHT, adjSSParameterLoop010000, 1)
+        ifNotPressedJumpTo(UP, _adjSSParameterLoop100000a)
+            ; increment 100 of TempBCDSS
+            mov a, TempBCDSS+1
+            anl a, #0x0f
+            add a, #0x01
+            da a
+            anl a, #0x0f
+            mov TempBCDSS+1, a
+
+            ; Update Hex value ; mov this part to after confirming
+            ; mov bcd+1, a
+            ; lcall bcd2hex
+            ; mov TempHexSS+0, x+0
+
+        _adjSSParameterLoop100000a:     
+        ifNotPressedJumpTo(DOWN, _adjSSParameterLoop100000b)
+            ; decrement 100 of SS Temp
+            mov a, TempBCDSS+1
+            anl a, #0x0f
+            add a, #0x09
+            da a
+            anl a, #0x0f
+            mov TempBCDSS+1, a
+
+        _adjSSParameterLoop100000b:
+            ; update param display
+        
     ljmp adjSSParameterLoop100000
+
     adjSSParameterLoop010000:
+        Set_Cursor(2,6)
+        ifPressedJumpTo(LEFT, adjSSParameterLoop100000, 1)
+        ifPressedJumpTo(RIGHT, adjSSParameterLoop001000, 1)
+        ifNotPressedJumpTo(UP, _adjSSParameterLoop010000a)
+            ; increment 10 of TempBCDSS
+            mov a, TempBCDSS+1
+            anl a, #0x0f
+            add a, #0x01
+            da a
+            anl a, #0x0f
+            mov TempBCDSS+1, a
+
+            ; Update Hex value ; mov this part to after confirming
+            ; mov bcd+1, a
+            ; lcall bcd2hex
+            ; mov TempHexSS+0, x+0
+
+        _adjSSParameterLoop010000a:     
+        ifNotPressedJumpTo(DOWN, _adjSSParameterLoop100000b)
+            ; decrement 10 of SS Temp
+            mov a, TempBCDSS+1
+            anl a, #0x0f
+            add a, #0x09
+            da a
+            anl a, #0x0f
+            mov TempBCDSS+1, a
+
+        _adjSSParameterLoop010000b:
+            ; update param display
 
     ljmp adjSSParameterLoop010000
     adjSSParameterLoop001000:
@@ -386,17 +497,22 @@ adjSEParameter:
     ; update display
     ; show cursor
     Set_Cursor(1, 1)
-    Send_Constant_String(#SoakE_display1)
+    Send_Constant_String(#SoakE_display_1)
     Set_cursor(2, 1)
-    Send_Constant_String(#SoakE_display2)
+    Send_Constant_String(#SoakE_display_2)
     WriteCommand(#0x0e) ; show cursor, no blink
 
     adjSEParameterLoop100000:
         Set_Cursor(2,5)
-        ifPressedJumpTo(LEFT, adjSSParameter)
-        ifPressedJumpTo(RIGHT, adjSEParameterLoop010000)
-        ifPressedCall(UP, Inc_SE_Temp_100)
-        ifPressedCall(DOWN, Dec_SE_Temp_100)
+
+        ifPressedJumpTo(LEFT, adjSSParameter, 2)
+        ifPressedJumpTo(RIGHT, adjSEParameterLoop010000, 1)
+        ifNotPressedJumpTo(UP, _adjSEParameterLoop100000a)
+            ;
+        _adjSEParameterLoop100000a:
+        ifNotPressedJumpTo(DOWN, _adjSEParameterLoop100000b)
+            ; 
+        _adjSEParameterLoop100000b:
         ; update param display
     ljmp adjSEParameterLoop100000
     adjSEParameterLoop010000:
