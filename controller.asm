@@ -454,27 +454,22 @@ adjSSParameter:
         ifPressedJumpTo(RIGHT, adjSSParameterLoop001000, 1)
         ifNotPressedJumpTo(UP, _adjSSParameterLoop010000a)
             ; increment 10 of TempBCDSS
-            mov a, TempBCDSS+1
-            anl a, #0x0f
-            add a, #0x01
+            mov a, TempBCDSS+0
+            anl a, #0xf0
+            add a, #0x10
             da a
-            anl a, #0x0f
-            mov TempBCDSS+1, a
-
-            ; Update Hex value ; mov this part to after confirming
-            ; mov bcd+1, a
-            ; lcall bcd2hex
-            ; mov TempHexSS+0, x+0
+            anl a, #0xf0
+            mov TempBCDSS+0, a
 
         _adjSSParameterLoop010000a:     
-        ifNotPressedJumpTo(DOWN, _adjSSParameterLoop100000b)
+        ifNotPressedJumpTo(DOWN, _adjSSParameterLoop010000b)
             ; decrement 10 of SS Temp
-            mov a, TempBCDSS+1
-            anl a, #0x0f
-            add a, #0x09
+            mov a, TempBCDSS+0
+            anl a, #0xf0
+            add a, #0x90
             da a
-            anl a, #0x0f
-            mov TempBCDSS+1, a
+            anl a, #0xf0
+            mov TempBCDSS+0, a
 
         _adjSSParameterLoop010000b:
             ; update param display
