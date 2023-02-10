@@ -35,13 +35,13 @@ STARTSTOP equ P2.4
 SPEAKER   equ P2.3
 
 ; LCD pin mapping
-LCD_RS equ P2.5
+LCD_RS equ P1.5
 ; LCD_RW equ Px.x ; Always grounded
-LCD_E  equ P2.4
-LCD_D4 equ P2.0
-LCD_D5 equ P2.1
-LCD_D6 equ P2.2
-LCD_D7 equ P2.3
+LCD_E  equ P1.4
+LCD_D4 equ P1.3
+LCD_D5 equ P1.2
+LCD_D6 equ P1.1
+LCD_D7 equ P1.0
 
 ; SPI pin mapping
 CS_ADC   equ P1.1
