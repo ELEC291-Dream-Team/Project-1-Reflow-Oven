@@ -27,10 +27,10 @@ BAUD          equ 115200
 BRG_VAL       equ (0x100-(CLK/(16*BAUD)))
 
 ; io pins
-LEFT      equ P1.0
-RIGHT     equ P1.3
-UP        equ P3.3
-DOWN      equ P4.5
+LEFT      equ P2.0
+RIGHT     equ P2.3
+UP        equ P2.3
+DOWN      equ P2.5
 STARTSTOP equ P2.4
 SPEAKER   equ P2.3
 
@@ -44,11 +44,11 @@ LCD_D6 equ P1.1
 LCD_D7 equ P1.0
 
 ; SPI pin mapping
-CS_ADC   equ P1.1
-CS_FLASH equ P1.2
-SPI_MOSI equ P1.7
-SPI_MISO equ P1.5
-SPI_SCLK equ P1.6
+CS_ADC   equ P3.6
+CS_FLASH equ P3.5
+SPI_MOSI equ P3.3
+SPI_MISO equ P3.4
+SPI_SCLK equ P3.2
 
 dseg at 0x30
 ; math32 variables
@@ -158,6 +158,30 @@ ReadVoltage:
     Load_y(10)
     lcall div32
 ret
+
+readVoltageChannel mac ; stores the voltage in x in mV
+    Load_x(0)
+    clr ADC_CS ; Enable device (active low)
+    mov r0, #0x01 ; start bit
+    lcall DO_SPI
+    mov a, #%0
+    swap a
+    orl a, #0x80
+    mov r0, a
+    lcall DO_SPI
+    mov a, r1
+    anl a, #0x03
+    mov x+1, a
+    lcall DO_SPI
+    mov x+0, r1
+    setb ADC_CS
+    Load_y(38)
+    lcall mul32
+    Load_y(35)
+    lcall add32
+    Load_y(10)
+    lcall div32
+endmac
 
 ReadTemp:
     lcall ReadVoltage
@@ -445,6 +469,7 @@ adjSSParameter:
 
         _adjSSParameterLoop100000b:
             ; update param display
+            Display_BCD(TempBCDSS+1)
         
     ljmp adjSSParameterLoop100000
 
@@ -473,6 +498,7 @@ adjSSParameter:
 
         _adjSSParameterLoop010000b:
             ; update param display
+            Display_BCD(TempBCDSS+0)
 
     ljmp adjSSParameterLoop010000
     adjSSParameterLoop001000:
