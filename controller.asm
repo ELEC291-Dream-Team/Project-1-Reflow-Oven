@@ -82,6 +82,9 @@ ReflowTimeHex: ds 2
 ; flash variables
 w: ds 3
 FlashReadAddr: ds 3
+; temp variables
+ColdTemp: ds 4
+HotTemp: ds 4
 
 temp_soak: ds 1
 time_soak: ds 1
@@ -189,33 +192,36 @@ readVoltageChannel mac ; stores the voltage in x in mV
     lcall div32
 endmac
 
-ReadTemp:
+ReadTemp: ; stores temp in x in hex
     readVoltageChannel(1)
     Load_y(297)
     lcall mul32
-    Load_y(2947)
+    Load_y(2950)
     lcall div32
     Load_y(273)
     lcall sub32
-    lcall hex2bcd
-ret
+    mov ColdTemp+3, x+3
+    mov ColdTemp+2, x+2
+    mov ColdTemp+1, x+1
+    mov ColdTemp+0, x+0
+    
+    readVoltageChannel(6)
+    Load_y(1000)
+    lcall mul32
+    Load_y(12341)
+    lcall div32
+    mov HotTemp+3, x+3
+    mov HotTemp+2, x+2
+    mov HotTemp+1, x+1
+    mov HotTemp+0, x+0
+    
+    mov y+3, ColdTemp+3
+    mov y+2, ColdTemp+2
+    mov y+1, ColdTemp+1
+    mov y+0, ColdTemp+0
+    lcall add32
 
-DO_SPI:
-    clr SPI_SCLK           ; Mode 0,0 default
-    mov R1, #0 ; Received byte stored in R1
-    mov R2, #8            ; Loop counter (8-bits)
-    DO_SPI_LOOP:
-        mov a, R0             ; Byte to write is in R0
-        rlc a                 ; Carry flag has bit to write
-        mov R0, a
-        mov SPI_MOSI, c
-        setb SPI_SCLK          ; Transmit
-        mov c, SPI_MISO        ; Read received bit
-        mov a, R1             ; Save received bit in R1
-        rlc a
-        mov R1, a
-        clr SPI_SCLK
-    djnz R2, DO_SPI_LOOP
+    lcall hex2bcd
 ret
 
 Send_SPI:
@@ -406,6 +412,8 @@ loadbyte mac
 endmac
 
 Save_Configuration:
+    push IE ; Save the current state of bit EA in the stack
+    clr EA ; Disable interrupts
 	mov FCON, #0x08 ; Page Buffer Mapping Enabled (FPS = 1)
 	mov dptr, #0x7f80 ; Last page of flash memory
 	; Save variables
@@ -422,6 +430,7 @@ Save_Configuration:
 	; CPU idles until writing of flash completes.
 	mov FCON, #0x00 ; Page Buffer Mapping Disabled (FPS = 0)
 	anl EECON, #0b10111111 ; Disable auto-erase
+    pop IE
 ret
 
 getbyte mac
