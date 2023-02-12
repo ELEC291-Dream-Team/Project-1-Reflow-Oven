@@ -27,10 +27,10 @@ BAUD          equ 115200
 BRG_VAL       equ (0x100-(CLK/(16*BAUD)))
 
 ; io pins
-LEFT      equ P2.0
-RIGHT     equ P2.3
-UP        equ P2.3
-DOWN      equ P2.5
+LEFT      equ P1.0
+RIGHT     equ P1.3
+UP        equ P3.3
+DOWN      equ P4.5
 STARTSTOP equ P2.4
 SPEAKER   equ P2.3
 
@@ -44,11 +44,11 @@ LCD_D6 equ P1.1
 LCD_D7 equ P1.0
 
 ; SPI pin mapping
-CS_ADC   equ P3.6
-CS_FLASH equ P3.5
-SPI_MOSI equ P3.3
-SPI_MISO equ P3.4
-SPI_SCLK equ P3.2
+CS_ADC   equ P1.1
+CS_FLASH equ P1.2
+SPI_MOSI equ P1.7
+SPI_MISO equ P1.5
+SPI_SCLK equ P1.6
 
 dseg at 0x30
 ; math32 variables
@@ -59,39 +59,31 @@ bcd: ds 5
 Counter0:    ds 2
 Counter1:    ds 2
 ; parameter variables
-TempBCDSS: ds 2
-TimeBCDSS: ds 2
-TempBCDSE: ds 2
-TimeBCDSE: ds 2
-TempBCDRS: ds 2
-TimeBCDRS: ds 2
-TempBCDRE: ds 2
-TimeBCDRE: ds 2
-TempHexSS: ds 2
-TimeHexSS: ds 2
-TempHexSE: ds 2
-TimeHexSE: ds 2
-TempHexRS: ds 2
-TimeHexRS: ds 2
-TempHexRE: ds 2
-TimeHexRE: ds 2
+STempBCD: ds 2
+STimeBCD: ds 2
+RTempBCD: ds 2
+RTimeBCD: ds 2
+STempHex: ds 2
+STimeHex: ds 2
+RTempHex: ds 2
+RTimeHex: ds 2
+
+temp_soak: ds 1
+time_soak: ds 1
+temp_refl: ds 1
+time_refl: ds 1
+
 
 bseg
-; math32 bit variable
-mf: dbit 1
+mf: dbit 1 ; math32 bit variable
+Updated: dbit 1 ; updated display flag
 
 cseg
-;                      1234567890123456
-Start_display_1:   db '   RIZZOVEN69   ', 0
-Start_display_2:   db 'Press Start     ', 0
-SoakS_display_1:   db 'Soak Start   1/4', 0
-SoakS_display_2:   db 'Tmp:xxx Time:xxx', 0
-SoakE_display_1:   db 'Soak End     2/4', 0
-SoakE_display_2:   db 'Tmp:xxx Time:xxx', 0
-ReflowS_display_1: db 'Reflow Start 3/4', 0
-ReflowS_display_2: db 'Tmp:xxx Time:xxx', 0
-ReflowE_display_1: db 'Reflow End   4/4', 0
-ReflowE_display_2: db 'Tmp:xxx Time:xxx', 0
+;                      		1234567890123456
+Start_display_1:   		db '   RIZZOVEN69   ', 0
+Start_display_2:   		db 'Press Start     ', 0
+Parameter_display_1:   	db 'ST  St  RT  Rt  ', 0
+Parameter_display_2:   	db 'xxx xxx xxx xxx ', 0
 
 Timer2_Init:
 	mov T2CON, #0 ; Stop timer/counter.  Autoreload mode.
@@ -158,30 +150,6 @@ ReadVoltage:
     Load_y(10)
     lcall div32
 ret
-
-readVoltageChannel mac ; stores the voltage in x in mV
-    Load_x(0)
-    clr ADC_CS ; Enable device (active low)
-    mov r0, #0x01 ; start bit
-    lcall DO_SPI
-    mov a, #%0
-    swap a
-    orl a, #0x80
-    mov r0, a
-    lcall DO_SPI
-    mov a, r1
-    anl a, #0x03
-    mov x+1, a
-    lcall DO_SPI
-    mov x+0, r1
-    setb ADC_CS
-    Load_y(38)
-    lcall mul32
-    Load_y(35)
-    lcall add32
-    Load_y(10)
-    lcall div32
-endmac
 
 ReadTemp:
     lcall ReadVoltage
@@ -354,6 +322,117 @@ Display_formated_BCD:
 	Display_BCD(bcd+0)
 ret
 
+; Eight bit number to display passed in ’a’.
+; Sends result to LCD
+SendToLCD:
+	mov b, #100
+	div ab
+	orl a, #0x30 ; Convert hundreds to ASCII
+	lcall ?WriteData ; Send to LCD
+	mov a, b    ; Remainder is in register b
+	mov b, #10
+	div ab
+	orl a, #0x30 ; Convert tens to ASCII
+	lcall ?WriteData; Send to LCD
+	mov a, b
+	orl a, #0x30 ; Convert units to ASCII
+	lcall ?WriteData; Send to LCD
+ret
+
+Change_8bit_Variable MAC
+	jb %0, %2
+	Wait_Milli_Seconds(#50) ; de-bounce
+	jb %0, %2
+	jnb %0, $
+	jb SHIFT_BUTTON, skip%Mb
+	dec %1
+	sjmp skip%Ma
+	skip%Mb:
+	inc %1
+	skip%Ma:
+ENDMAC
+
+loadbyte mac
+	mov a, %0
+	movx @dptr, a
+	inc dptr
+endmac
+
+Save_Configuration:
+	mov FCON, #0x08 ; Page Buffer Mapping Enabled (FPS = 1)
+	mov dptr, #0x7f80 ; Last page of flash memory
+	; Save variables
+	loadbyte(temp_soak) ; @0x7f80
+	loadbyte(time_soak) ; @0x7f81
+	loadbyte(temp_refl) ; @0x7f82
+	loadbyte(time_refl) ; @0x7f83
+	loadbyte(#0x55) ; First key value @0x7f84
+	loadbyte(#0xAA) ; Second key value @0x7f85
+	mov FCON, #0x00 ; Page Buffer Mapping Disabled (FPS = 0)
+	orl EECON, #0b01000000 ; Enable auto-erase on next write sequence
+	mov FCON, #0x50 ; Write trigger first byte
+	mov FCON, #0xA0 ; Write trigger second byte
+	; CPU idles until writing of flash completes.
+	mov FCON, #0x00 ; Page Buffer Mapping Disabled (FPS = 0)
+	anl EECON, #0b10111111 ; Disable auto-erase
+ret
+
+getbyte mac
+	clr a
+	movc a, @a+dptr
+	mov %0, a
+	inc dptr
+Endmac
+
+Load_Configuration:
+	mov dptr, #0x7f84 ; First key value location.
+	getbyte(R0) ; 0x7f84 should contain 0x55
+	cjne R0, #0x55, Load_Defaults
+	getbyte(R0) ; 0x7f85 should contain 0xAA
+	cjne R0, #0xAA, Load_Defaults
+	; Keys are good.  Get stored values.
+	mov dptr, #0x7f80
+	getbyte(temp_soak) ; 0x7f80
+	getbyte(time_soak) ; 0x7f81
+	getbyte(temp_refl) ; 0x7f82
+	getbyte(time_refl) ; 0x7f83
+ret
+
+; Load defaults if 'keys' are incorrect
+Load_Defaults:
+	mov STempBCD, #150
+	mov STimeBCD, #45
+	mov RTempBCD, #225
+	mov RTimeBCD, #30
+ret
+
+updateDisplay:
+    jb Updated, _clearUpdated ; if !Updated skip print
+    ljmp _updateDisplayDone
+    _clearUpdated:
+        clr Updated
+        ; Display Soak Temp
+        Set_Cursor(2,1)
+        mov a, STempBCD
+        lcall SendToLCD
+        
+        ; Display Soak Time
+        Set_Cursor(2,5)
+        mov a, STimeBCD
+        lcall SendToLCD
+        
+        ; Display Reflow Temp
+        Set_Cursor(2,9)
+        mov a, RTempBCD
+        lcall SendToLCD
+        
+        ; Display Reflow Time
+        Set_Cursor(2,13)
+        mov a, RTimeBCD
+        lcall SendToLCD
+    _updateDisplayDone:
+ret
+
 reset:
     mov SP, #0x7F
     lcall Timer2_Init
@@ -370,40 +449,25 @@ reset:
     mov P4M1, #0
     
     setb EA   ; Enable Global interrupts
+    setb Updated ; update the display on reset
 
     ; initialize values
-    mov TempBCDSS+0, #0x00
-    mov TempBCDSS+1, #0x00
-    mov TimeBCDSS+0, #0x00
-    mov TimeBCDSS+1, #0x00
-    mov TempBCDSE+0, #0x00
-    mov TempBCDSE+1, #0x00
-    mov TimeBCDSE+0, #0x00
-    mov TimeBCDSE+1, #0x00
-    mov TempBCDRS+0, #0x00
-    mov TempBCDRS+1, #0x00
-    mov TimeBCDRS+0, #0x00
-    mov TimeBCDRS+1, #0x00
-    mov TempBCDRE+0, #0x00
-    mov TempBCDRE+1, #0x00
-    mov TimeBCDRE+0, #0x00
-    mov TimeBCDRE+1, #0x00
-    mov TempHexSS+0, #0x00
-    mov TempHexSS+1, #0x00
-    mov TimeHexSS+0, #0x00
-    mov TimeHexSS+1, #0x00
-    mov TempHexSE+0, #0x00
-    mov TempHexSE+1, #0x00
-    mov TimeHexSE+0, #0x00
-    mov TimeHexSE+1, #0x00
-    mov TempHexRS+0, #0x00
-    mov TempHexRS+1, #0x00
-    mov TimeHexRS+0, #0x00
-    mov TimeHexRS+1, #0x00
-    mov TempHexRE+0, #0x00
-    mov TempHexRE+1, #0x00
-    mov TimeHexRE+0, #0x00
-    mov TimeHexRE+1, #0x00
+    mov STempBCD+0, #0x00
+    mov STempBCD+1, #0x00
+    mov STimeBCD+0, #0x00
+    mov STimeBCD+1, #0x00
+    mov RTempBCD+0, #0x00
+    mov RTempBCD+1, #0x00
+    mov RTimeBCD+0, #0x00
+    mov RTimeBCD+1, #0x00
+	mov STempHex+0, #0x00
+    mov STempHex+1, #0x00
+    mov STimeHex+0, #0x00
+    mov STimeHex+1, #0x00
+    mov RTempHex+0, #0x00
+    mov RTempHex+1, #0x00
+    mov RTimeHEx+0, #0x00
+    mov RTimeHex+1, #0x00
 
     mov bcd+0, #0x00
     mov bcd+1, #0x00
@@ -423,133 +487,437 @@ start:
     WriteCommand(#0x0c) ; hide cursor, no blink
 
     startLoop:
-        ifPressedJumpTo(STARTSTOP, adjSSParameter, 1)
-        ifPressedJumpTo(LEFT, adjSSParameter, 1)
-        ifPressedJumpTo(RIGHT, adjSSParameter, 1)
-        ifPressedJumpTo(UP, adjSSParameter, 1)
-        ifPressedJumpTo(DOWN, adjSSParameter, 1)
+        ifPressedJumpTo(STARTSTOP, adjParameters, 1)
+        ifPressedJumpTo(LEFT, adjParameters, 1)
+        ifPressedJumpTo(RIGHT, adjParameters, 1)
+        ifPressedJumpTo(UP, adjParameters, 1)
+        ifPressedJumpTo(DOWN, adjParameters, 1)
     ljmp startLoop
 
-adjSSParameter:
+adjParameters:
     ; update display
     ; show cursor
     Set_Cursor(1, 1)
-    Send_Constant_String(#SoakS_display_1)
+    Send_Constant_String(#Parameter_display_1)
     Set_cursor(2, 1)
-    Send_Constant_String(#SoakS_display_2)
+    Send_Constant_String(#Parameter_display_2)
     WriteCommand(#0x0e) ; show cursor, no blink
-
-    adjSSParameterLoop100000:
-        Set_Cursor(2,5)
-        ifPressedJumpTo(LEFT, start, 1)
-        ifPressedJumpTo(RIGHT, adjSSParameterLoop010000, 1)
-        ifNotPressedJumpTo(UP, _adjSSParameterLoop100000a)
-            ; increment 100 of TempBCDSS
-            mov a, TempBCDSS+1
-            anl a, #0x0f
-            add a, #0x01
-            da a
-            anl a, #0x0f
-            mov TempBCDSS+1, a
 
             ; Update Hex value ; mov this part to after confirming
             ; mov bcd+1, a
             ; lcall bcd2hex
             ; mov TempHexSS+0, x+0
 
-        _adjSSParameterLoop100000a:     
-        ifNotPressedJumpTo(DOWN, _adjSSParameterLoop100000b)
-            ; decrement 100 of SS Temp
-            mov a, TempBCDSS+1
+	; ----------------------------------------------;
+	; ------------- Soak Temperature ---------------;
+	; ----------------------------------------------;
+    adjSTemp100:
+        Set_Cursor(2,1)
+        ifPressedJumpTo(LEFT, start, 1)
+        ifPressedJumpTo(RIGHT, adjSTemp010, 1)
+        ifNotPressedJumpTo(UP, _adjSTemp100a)
+            ; increment 100's of Soak Temp
+            mov a, STempBCD+1
+            anl a, #0x0f
+            add a, #0x01
+            da a
+            anl a, #0x0f
+            mov STempBCD+1, a
+            setb Updated
+
+        _adjSTemp100a:     
+        ifNotPressedJumpTo(DOWN, _adjSTemp100b)
+            ; decrement 100's of Soak Temp
+            mov a, STempBCD+1
             anl a, #0x0f
             add a, #0x09
             da a
             anl a, #0x0f
-            mov TempBCDSS+1, a
+            mov STempBCD+1, a
+            setb Updated
 
-        _adjSSParameterLoop100000b:
-            ; update param display
-            Display_BCD(TempBCDSS+1)
+        _adjSTemp100b:
+            ljmp updateDisplay ; update param display
         
-    ljmp adjSSParameterLoop100000
-
-    adjSSParameterLoop010000:
-        Set_Cursor(2,6)
-        ifPressedJumpTo(LEFT, adjSSParameterLoop100000, 1)
-        ifPressedJumpTo(RIGHT, adjSSParameterLoop001000, 1)
-        ifNotPressedJumpTo(UP, _adjSSParameterLoop010000a)
-            ; increment 10 of TempBCDSS
-            mov a, TempBCDSS+0
-            anl a, #0xf0
-            add a, #0x10
+    ljmp adjSTemp100 
+    
+    adjSTemp010:
+        Set_Cursor(2,2)
+        ifPressedJumpTo(LEFT, adjSTemp100, 1)
+        ifPressedJumpTo(RIGHT, adjSTemp001, 1)
+        ifNotPressedJumpTo(UP, _adjSTemp010a)
+            ; increment 10's of Soak Temp
+            mov a, STempBCD+0
+            mov b, a
+            swap a
+            anl a, #0x0f
+            add a, #0x01
             da a
-            anl a, #0xf0
-            mov TempBCDSS+0, a
+            anl a, #0x0f
+            swap a
+            anl b, #0x0f
+            orl a, b
+            mov STempBCD+0, a
+            setb Updated
 
-        _adjSSParameterLoop010000a:     
-        ifNotPressedJumpTo(DOWN, _adjSSParameterLoop010000b)
-            ; decrement 10 of SS Temp
-            mov a, TempBCDSS+0
-            anl a, #0xf0
-            add a, #0x90
+        _adjSTemp010a:     
+        ifNotPressedJumpTo(DOWN, _adjSTemp010b)
+            ; decrement 10's of Soak Temp
+            mov a, STempBCD+0
+            mov b, a
+            swap a
+            anl a, #0x0f
+            add a, #0x09
             da a
-            anl a, #0xf0
-            mov TempBCDSS+0, a
+            anl a, #0x0f
+            swap a
+            anl b, #0x0f
+            orl a, b
+            mov STempBCD+0, a
+            setb Updated
 
-        _adjSSParameterLoop010000b:
-            ; update param display
-            Display_BCD(TempBCDSS+0)
+        _adjSTemp010b:
+            ljmp updateDisplay ; update param display
+        
+    ljmp adjSTemp010 
+    
+    adjSTemp001:
+        Set_Cursor(2,3)
+        ifPressedJumpTo(LEFT, adjSTemp010, 1)
+        ifPressedJumpTo(RIGHT, adjSTime100, 1)
+        ifNotPressedJumpTo(UP, _adjSTemp001a)
+            ; increment 1's of Soak Temp
+            mov a, STempBCD+0
+            anl a, #0x0f
+            add a, #0x01
+            da a
+            anl a, #0x0f
+            mov STempBCD+0, a
+            setb Updated
 
-    ljmp adjSSParameterLoop010000
-    adjSSParameterLoop001000:
+        _adjSTemp001a:     
+        ifNotPressedJumpTo(DOWN, _adjSTemp001b)
+            ; decrement 1's of Soak Temp
+            mov a, STempBCD+0
+            anl a, #0x0f
+            add a, #0x09
+            da a
+            anl a, #0x0f
+            mov STempBCD+0, a
+            setb Updated
 
-    ljmp adjSSParameterLoop001000
-    adjSSParameterLoop000100:
-
-    ljmp adjSSParameterLoop000100
-    adjSSParameterLoop000010:
-
-    ljmp adjSSParameterLoop000010
-    adjSSParameterLoop000001:
-
-    ljmp adjSSParameterLoop000001
-
-adjSEParameter:
-    ; update display
-    ; show cursor
-    Set_Cursor(1, 1)
-    Send_Constant_String(#SoakE_display_1)
-    Set_cursor(2, 1)
-    Send_Constant_String(#SoakE_display_2)
-    WriteCommand(#0x0e) ; show cursor, no blink
-
-    adjSEParameterLoop100000:
+        _adjSTemp001b:
+            ljmp updateDisplay ; update param display
+        
+    ljmp adjSTemp001
+    
+    ; ----------------------------------------------;
+	; ---------------- Soak Time -------------------;
+	; ----------------------------------------------;
+    adjSTime100:
         Set_Cursor(2,5)
+        ifPressedJumpTo(LEFT, adjSTemp001, 1)
+        ifPressedJumpTo(RIGHT, adjSTime010, 1)
+        ifNotPressedJumpTo(UP, _adjSTime100a)
+            ; increment 100's of Soak Time
+            mov a, STimeBCD+1
+            anl a, #0x0f
+            add a, #0x01
+            da a
+            anl a, #0x0f
+            mov STimeBCD+1, a
+            setb Updated
 
-        ifPressedJumpTo(LEFT, adjSSParameter, 2)
-        ifPressedJumpTo(RIGHT, adjSEParameterLoop010000, 1)
-        ifNotPressedJumpTo(UP, _adjSEParameterLoop100000a)
-            ;
-        _adjSEParameterLoop100000a:
-        ifNotPressedJumpTo(DOWN, _adjSEParameterLoop100000b)
-            ; 
-        _adjSEParameterLoop100000b:
-        ; update param display
-    ljmp adjSEParameterLoop100000
-    adjSEParameterLoop010000:
+        _adjSTime100a:     
+        ifNotPressedJumpTo(DOWN, _adjSTime100b)
+            ; decrement 100's of Soak Time
+            mov a, STimeBCD+1
+            anl a, #0x0f
+            add a, #0x09
+            da a
+            anl a, #0x0f
+            mov STimeBCD+1, a
+            setb Updated
+
+        _adjSTime100b:
+            ljmp updateDisplay ; update param display
         
-    ljmp adjSEParameterLoop010000
-    adjSEParameterLoop001000:
+    ljmp adjSTime100 
+    
+    adjSTime010:
+        Set_Cursor(2,6)
+        ifPressedJumpTo(LEFT, adjSTime100, 1)
+        ifPressedJumpTo(RIGHT, adjSTime001, 1)
+        ifNotPressedJumpTo(UP, _adjSTime010a)
+            ; increment 10's of Soak Time
+            mov a, STimeBCD+0
+            mov b, a
+            swap a
+            anl a, #0x0f
+            add a, #0x01
+            da a
+            anl a, #0x0f
+            swap a
+            anl b, #0x0f
+            orl a, b
+            mov STimeBCD+0, a
+            setb Updated
 
-    ljmp adjSEParameterLoop001000
-    adjSEParameterLoop000100:
+        _adjSTime010a:     
+        ifNotPressedJumpTo(DOWN, _adjSTime010b)
+            ; decrement 10's of Soak Time
+            mov a, STimeBCD+0
+            mov b, a
+            swap a
+            anl a, #0x0f
+            add a, #0x09
+            da a
+            anl a, #0x0f
+            swap a
+            anl b, #0x0f
+            orl a, b
+            mov STimeBCD+0, a
+            setb Updated
 
-    ljmp adjSEParameterLoop000100
-    adjSEParameterLoop000010:
+        _adjSTime010b:
+            ljmp updateDisplay ; update param display
+        
+    ljmp adjSTime010 
+    
+    adjSTime001:
+        Set_Cursor(2,7)
+        ifPressedJumpTo(LEFT, adjSTemp010, 2)
+        ifPressedJumpTo(RIGHT, adjSTime100, 2)
+        ifNotPressedJumpTo(UP, _adjSTime001a)
+            ; increment 1's of Soak Time
+            mov a, STimeBCD+0
+            anl a, #0x0f
+            add a, #0x01
+            da a
+            anl a, #0x0f
+            mov STimeBCD+0, a
+            setb Updated
 
-    ljmp adjSEParameterLoop000010
-    adjSEParameterLoop000001:
+        _adjSTime001a:     
+        ifNotPressedJumpTo(DOWN, _adjSTime001b)
+            ; decrement 1's of Soak Time
+            mov a, STimeBCD+0
+            anl a, #0x0f
+            add a, #0x09
+            da a
+            anl a, #0x0f
+            mov STimeBCD+0, a
+            setb Updated
 
-    ljmp adjSEParameterLoop000001
+        _adjSTime001b:
+            ljmp updateDisplay ; update param display
+        
+    ljmp adjSTime001
+    
+    ; ----------------------------------------------;
+	; ------------ Reflow Temperature --------------;
+	; ----------------------------------------------;
+    adjRTemp100:
+        Set_Cursor(2,9)
+        ifPressedJumpTo(LEFT, adjSTime001, 1)
+        ifPressedJumpTo(RIGHT, adjRTemp010, 1)
+        ifNotPressedJumpTo(UP, _adjRTemp100a)
+            ; increment 100's of Reflow Temp
+            mov a, RTempBCD+1
+            anl a, #0x0f
+            add a, #0x01
+            da a
+            anl a, #0x0f
+            mov RTempBCD+1, a
+            setb Updated
 
+        _adjRTemp100a:     
+        ifNotPressedJumpTo(DOWN, _adjRTemp100b)
+            ; decrement 100's of Reflow Temp
+            mov a, RTempBCD+1
+            anl a, #0x0f
+            add a, #0x09
+            da a
+            anl a, #0x0f
+            mov RTempBCD+1, a
+            setb Updated
+
+        _adjRTemp100b:
+            ljmp updateDisplay ; update param display
+        
+    ljmp adjRTemp100 
+    
+    adjRTemp010:
+        Set_Cursor(2,10)
+        ifPressedJumpTo(LEFT, adjRTemp100, 1)
+        ifPressedJumpTo(RIGHT, adjRTemp001, 1)
+        ifNotPressedJumpTo(UP, _adjRTemp010a)
+            ; increment 10's of Reflow Temp
+            mov a, RTempBCD+0
+            mov b, a
+            swap a
+            anl a, #0x0f
+            add a, #0x01
+            da a
+            anl a, #0x0f
+            swap a
+            anl b, #0x0f
+            orl a, b
+            mov RTempBCD+0, a
+            setb Updated
+
+        _adjRTemp010a:     
+        ifNotPressedJumpTo(DOWN, _adjRTemp010b)
+            ; decrement 10's of Reflow Temp
+            mov a, RTempBCD+0
+            mov b, a
+            swap a
+            anl a, #0x0f
+            add a, #0x09
+            da a
+            anl a, #0x0f
+            swap a
+            anl b, #0x0f
+            orl a, b
+            mov RTempBCD+0, a
+            setb Updated
+
+        _adjRTemp010b:
+            ljmp updateDisplay ; update param display
+        
+    ljmp adjRTemp010 
+    
+    adjRTemp001:
+        Set_Cursor(2,11)
+        ifPressedJumpTo(LEFT, adjRTemp010, 1)
+        ifPressedJumpTo(RIGHT, adjRTime100, 1)
+        ifNotPressedJumpTo(UP, _adjRTemp001a)
+            ; increment 1's of Reflow Temp
+            mov a, RTempBCD+0
+            anl a, #0x0f
+            add a, #0x01
+            da a
+            anl a, #0x0f
+            mov RTempBCD+0, a
+            setb Updated
+
+        _adjRTemp001a:     
+        ifNotPressedJumpTo(DOWN, _adjRTemp001b)
+            ; decrement 1's of Reflow Temp
+            mov a, RTempBCD+0
+            anl a, #0x0f
+            add a, #0x09
+            da a
+            anl a, #0x0f
+            mov RTempBCD+0, a
+            setb Updated
+
+        _adjRTemp001b:
+            ljmp updateDisplay ; update param display
+        
+    ljmp adjSTemp001
+    
+    ; ----------------------------------------------;
+	; --------------- Reflow Time ------------------;
+	; ----------------------------------------------;
+    adjRTime100:
+        Set_Cursor(2,13)
+        ifPressedJumpTo(LEFT, adjRTemp001, 1)
+        ifPressedJumpTo(RIGHT, adjRTime010, 1)
+        ifNotPressedJumpTo(UP, _adjRTime100a)
+            ; increment 100's of Reflow Time
+            mov a, RTimeBCD+1
+            anl a, #0x0f
+            add a, #0x01
+            da a
+            anl a, #0x0f
+            mov RTimeBCD+1, a
+            setb Updated
+
+        _adjRTime100a:     
+        ifNotPressedJumpTo(DOWN, _adjRTime100b)
+            ; decrement 100's of Reflow Time
+            mov a, RTimeBCD+1
+            anl a, #0x0f
+            add a, #0x09
+            da a
+            anl a, #0x0f
+            mov RTimeBCD+1, a
+            setb Updated
+
+        _adjRTime100b:
+            ljmp updateDisplay ; update param display
+        
+    ljmp adjRTime100 
+    
+    adjRTime010:
+        Set_Cursor(2,14)
+        ifPressedJumpTo(LEFT, adjRTime100, 1)
+        ifPressedJumpTo(RIGHT, adjRTime001, 1)
+        ifNotPressedJumpTo(UP, _adjRTime010a)
+            ; increment 10's of Reflow Time
+            mov a, RTimeBCD+0
+            mov b, a
+            swap a
+            anl a, #0x0f
+            add a, #0x01
+            da a
+            anl a, #0x0f
+            swap a
+            anl b, #0x0f
+            orl a, b
+            mov RTimeBCD+0, a
+            setb Updated
+
+        _adjRTime010a:     
+        ifNotPressedJumpTo(DOWN, _adjRTime010b)
+            ; decrement 10's of Reflow Time
+            mov a, RTimeBCD+0
+            mov b, a
+            swap a
+            anl a, #0x0f
+            add a, #0x09
+            da a
+            anl a, #0x0f
+            swap a
+            anl b, #0x0f
+            orl a, b
+            mov RTimeBCD+0, a
+            setb Updated
+
+        _adjRTime010b:
+            ljmp updateDisplay ; update param display
+        
+    ljmp adjRTime010 
+    
+    adjRTime001:
+        Set_Cursor(2,15)
+        ifPressedJumpTo(LEFT, adjRTemp010, 2)
+        ifPressedJumpTo(RIGHT, adjRTime100, 2)
+        ifNotPressedJumpTo(UP, _adjRTime001a)
+            ; increment 1's of Reflow Time
+            mov a, RTimeBCD+0
+            anl a, #0x0f
+            add a, #0x01
+            da a
+            anl a, #0x0f
+            mov RTimeBCD+0, a
+            setb Updated
+
+        _adjRTime001a:     
+        ifNotPressedJumpTo(DOWN, _adjRTime001b)
+            ; decrement 1's of Reflow Time
+            mov a, RTimeBCD+0
+            anl a, #0x0f
+            add a, #0x09
+            da a
+            anl a, #0x0f
+            mov RTimeBCD+0, a
+            setb Updated
+
+        _adjRTime001b:
+            ljmp updateDisplay ; update param display
+        
+    ljmp adjRTime001
+    
 END
