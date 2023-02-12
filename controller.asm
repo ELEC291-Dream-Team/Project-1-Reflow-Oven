@@ -22,7 +22,6 @@ $LIST
 CLK           equ 22122000 ; Microcontroller system crystal frequency in Hz
 TIMER2_RATE   equ 1000     ; 1000Hz, for a timer tick of 1ms
 TIMER2_RELOAD equ ((65536-(CLK/TIMER2_RATE)))
-; TIMER2_RELOAD equ 43414
 BAUD          equ 115200
 BRG_VAL       equ (0x100-(CLK/(16*BAUD)))
 
@@ -44,11 +43,24 @@ LCD_D6 equ P1.1
 LCD_D7 equ P1.0
 
 ; SPI pin mapping
-CS_ADC   equ P3.6
-CS_FLASH equ P3.5
+SPI_SCLK equ P3.2
 SPI_MOSI equ P3.3
 SPI_MISO equ P3.4
-SPI_SCLK equ P3.2
+CS_FLASH equ P3.5
+CS_ADC   equ P3.6
+
+; Commands supported by the SPI flash memory according to the datasheet
+WRITE_ENABLE     EQU 0x06  ; Address:0 Dummy:0 Num:0
+WRITE_DISABLE    EQU 0x04  ; Address:0 Dummy:0 Num:0
+READ_STATUS      EQU 0x05  ; Address:0 Dummy:0 Num:1 to infinite
+READ_BYTES       EQU 0x03  ; Address:3 Dummy:0 Num:1 to infinite
+READ_SILICON_ID  EQU 0xab  ; Address:0 Dummy:3 Num:1 to infinite
+FAST_READ        EQU 0x0b  ; Address:3 Dummy:1 Num:1 to infinite
+WRITE_STATUS     EQU 0x01  ; Address:0 Dummy:0 Num:1
+WRITE_BYTES      EQU 0x02  ; Address:3 Dummy:0 Num:1 to 256
+ERASE_ALL        EQU 0xc7  ; Address:0 Dummy:0 Num:0
+ERASE_BLOCK      EQU 0xd8  ; Address:3 Dummy:0 Num:0
+READ_DEVICE_ID   EQU 0x9f  ; Address:0 Dummy:2 Num:1 to infinite
 
 dseg at 0x30
 ; math32 variables
@@ -67,6 +79,9 @@ SoakTempHex: ds 2
 SoakTimeHex: ds 2
 ReflowTempHex: ds 2
 ReflowTimeHex: ds 2
+; flash variables
+w: ds 3
+FlashReadAddr: ds 3
 
 temp_soak: ds 1
 time_soak: ds 1
@@ -146,43 +161,26 @@ Timer2_ISR:
 	pop acc
 reti
 
-ReadVoltage:
-    Load_x(0)
-    clr CS_ADC ; Enable device (active low)
-    mov r0, #0x01 ; start bit
-    lcall DO_SPI
-    mov r0, #0x80 ; channel 0, single
-    lcall DO_SPI
-    mov a, r1
-    anl a, #0x03
-    mov x+1, a
-    lcall DO_SPI
-    mov x+0, r1
-    setb CS_ADC
-    Load_y(38)
-    lcall mul32
-    Load_y(250)
-    lcall add32
-    Load_y(10)
-    lcall div32
-ret
-
 readVoltageChannel mac ; stores the voltage in x in mV
     Load_x(0)
-    clr ADC_CS ; Enable device (active low)
-    mov r0, #0x01 ; start bit
-    lcall DO_SPI
+
+    clr EA
+    clr CS_ADC ; Enable device (active low)
+
+    mov a, #0x01
+    lcall Send_SPI
     mov a, #%0
     swap a
     orl a, #0x80
-    mov r0, a
-    lcall DO_SPI
-    mov a, r1
+    lcall Send_SPI
     anl a, #0x03
     mov x+1, a
-    lcall DO_SPI
-    mov x+0, r1
-    setb ADC_CS
+    lcall Send_SPI
+    mov x+0, a
+
+    setb CS_ADC
+    setb EA
+    
     Load_y(38)
     lcall mul32
     Load_y(35)
@@ -192,7 +190,7 @@ readVoltageChannel mac ; stores the voltage in x in mV
 endmac
 
 ReadTemp:
-    lcall ReadVoltage
+    readVoltageChannel(1)
     Load_y(297)
     lcall mul32
     Load_y(2947)
@@ -218,6 +216,28 @@ DO_SPI:
         mov R1, a
         clr SPI_SCLK
     djnz R2, DO_SPI_LOOP
+ret
+
+Send_SPI:
+	SPIBIT MAC
+	    ; Send/Receive bit %0
+		rlc a
+		mov SPI_MOSI, c
+		setb SPI_SCLK
+		mov c, SPI_MISO
+		clr SPI_SCLK
+		mov acc.0, c
+	ENDMAC
+	
+	SPIBIT(7)
+	SPIBIT(6)
+	SPIBIT(5)
+	SPIBIT(4)
+	SPIBIT(3)
+	SPIBIT(2)
+	SPIBIT(1)
+	SPIBIT(0)
+
 ret
 
 InitSPI:
@@ -907,38 +927,33 @@ ready:
     ;--------- Update Parameter Hex values -----------;
     ;-------------------------------------------------;
     
+    Load_x(0) ; clear the bcd
+    lcall hex2bcd
+    
     ; Update Soak Temp Hex
-    mov a, SoakTempBCD+0
-    mov bcd+0, a
-    mov a, SoakTempBCD+1
-    mov bcd+1, a
+    mov bcd+0, SoakTempBCD+0
+    mov bcd+1, SoakTempBCD+1
     lcall bcd2hex
     mov SoakTempHex+0, x+0
     mov SoakTempHex+1, x+1
 
     ; Update Soak Time Hex
-    mov a, SoakTimeBCD+0
-    mov bcd+0, a
-    mov a, SoakTimeBCD+1
-    mov bcd+1, a
+    mov bcd+0, SoakTimeBCD+0
+    mov bcd+1, SoakTimeBCD+1
     lcall bcd2hex
     mov SoakTimeHex+0, x+0
     mov SoakTimeHex+1, x+1
 
     ; Update Reflow Temp Hex
-    mov a, ReflowTempBCD+0
-    mov bcd+0, a
-    mov a, ReflowTempBCD+1
-    mov bcd+1, a
+    mov bcd+0, ReflowTempBCD+0
+    mov bcd+1, ReflowTempBCD+1
     lcall bcd2hex
     mov ReflowTempHex+0, x+0
     mov ReflowTempHex+1, x+1
 
     ; Update Reflow Time Hex
-    mov a, ReflowTimeBCD+0
-    mov bcd+0, a
-    mov a, ReflowTimeBCD+1
-    mov bcd+1, a
+    mov bcd+0, ReflowTimeBCD+0
+    mov bcd+1, ReflowTimeBCD+1
     lcall bcd2hex
     mov ReflowTimeHex+0, x+0
     mov ReflowTimeHex+1, x+1
@@ -946,7 +961,6 @@ ready:
     readyLoop:
         ifPressedJumpTo(STARTSTOP, RampToSoak, 1)
     ljmp readyLoop
-ljmp ready
 
 ;-------------------------------------------;
 ;---------------- Oven FSM -----------------;
@@ -964,8 +978,6 @@ RampToSoak:
         ; jmp to Soak if temp >= soak temp
         ; update LCD
     ljmp RampToSoakLoop
-    
-ljmp RampToSoak
 
 Soak:
     ; display Soak message
