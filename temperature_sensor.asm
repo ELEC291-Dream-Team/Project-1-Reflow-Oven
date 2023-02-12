@@ -25,8 +25,8 @@ DSEG at 40H
 x: ds 4
 y: ds 4
 bcd: ds 5
-
-
+ 
+ 
 CSEG 
 
 ; These 'equ' must match the hardware wiring
@@ -56,7 +56,7 @@ endmac
 
 BOOT_BUTTON   equ P4.5
 
-temperature: db 'temperature:', 0
+temperature: db 'Temperature (C):', 0
 
 INIT_SPI: 
     setb MY_MISO    ; Make MISO an input pin 
@@ -67,6 +67,7 @@ DO_SPI_G:
     push acc 
     mov R1, #0      ; Received byte stored in R1 
     mov R2, #8      ; Loop counter (8-bits) 
+
 DO_SPI_G_LOOP: 
     mov a, R0       ; Byte to write is in R0 
     rlc a           ; Carry flag has bit to write 
@@ -82,7 +83,6 @@ DO_SPI_G_LOOP:
     pop acc 
     ret 
     
-
 ; Configure the serial port and baud rate
 InitSerialPort:
     ; Since the reset button bounces, we need to wait a bit before
@@ -99,7 +99,6 @@ InitSerialPort:
 	mov	BDRCON,#0x1E ; BDRCON=BRR|TBCK|RBCK|SPD;
     ret
     
-    	
 ; Send a character using the serial port
 putchar:
     jnb TI, putchar
@@ -117,7 +116,6 @@ SendString:
     sjmp SendString
 SendStringDone:
     ret
-
 
 Read_ADC_Channel MAC
 	mov b, #%0
@@ -182,6 +180,7 @@ Display_10_digit_BCD:
 	swap a
 	jnz skip_blank
 	Display_char(#' ')
+
 skip_blank:
 	ret
 	
@@ -213,11 +212,7 @@ endmac
 	
 MainProgram:
     mov SP, #7FH ; Set the stack pointer to the begining of idata
-    
     lcall InitSerialPort
-    ;mov DPTR, #Hello_World
-    ;lcall SendString
-    
 	Read_ADC_Channel(1)
 	Send_BCD(bcd)
 	mov a, #'\r'
@@ -228,16 +223,12 @@ MainProgram:
 	lcall LCD_4BIT
 	Set_Cursor(1,1)
     Send_Constant_String(#temperature)
-    Set_Cursor(2,1)
-	Display_10_digit_BCD(bcd)
     
 loop:
-	jb BOOT_BUTTON, loop_temp_button  ; if the 'BOOT' button is not pressed skip
-	Wait_Milli_Seconds(#50)	; Debounce delay.  This macro is also in 'LCD_4bit.inc'
-	jb BOOT_BUTTON, loop_temp_button  ; if the 'BOOT' button is not pressed skip
-	jnb BOOT_BUTTON, $		; Wait for button release.  The '$' means: jump to same instruction.
-	; A valid press of the 'BOOT' button has been detected, reset the BCD counter.
-	; But first stop timer 2 and reset the milli-seconds counter, to resync everything.
+	jb BOOT_BUTTON, loop_temp_button  
+	Wait_Milli_Seconds(#50)	
+	jb BOOT_BUTTON, loop_temp_button  
+	jnb BOOT_BUTTON, $		
 
 loop_temp_button:
 	lcall display_10_digit_bcd
@@ -247,5 +238,5 @@ delay:
 	inc r7
 	cjne r7, #4, delay
 	ret
-	
+
 END
