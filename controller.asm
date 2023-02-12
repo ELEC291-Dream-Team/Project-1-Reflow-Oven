@@ -32,7 +32,7 @@ RIGHT     equ P2.3
 UP        equ P2.3
 DOWN      equ P2.5
 STARTSTOP equ P2.4
-SPEAKER   equ P2.3
+SPEAKER_E equ P2.3
 
 ; LCD pin mapping
 LCD_RS equ P1.5
@@ -59,14 +59,14 @@ bcd: ds 5
 Counter0:    ds 2
 Counter1:    ds 2
 ; parameter variables
-STempBCD: ds 2
-STimeBCD: ds 2
-RTempBCD: ds 2
-RTimeBCD: ds 2
-STempHex: ds 2
-STimeHex: ds 2
-RTempHex: ds 2
-RTimeHex: ds 2
+SoakTempBCD: ds 2
+SoakTimeBCD: ds 2
+ReflowTempBCD: ds 2
+ReflowTimeBCD: ds 2
+SoakTempHex: ds 2
+SoakTimeHex: ds 2
+ReflowTempHex: ds 2
+ReflowTimeHex: ds 2
 
 temp_soak: ds 1
 time_soak: ds 1
@@ -389,10 +389,10 @@ Save_Configuration:
 	mov FCON, #0x08 ; Page Buffer Mapping Enabled (FPS = 1)
 	mov dptr, #0x7f80 ; Last page of flash memory
 	; Save variables
-	loadbyte(STempBCD) ; @0x7f80
-	loadbyte(STimeBCD) ; @0x7f81
-	loadbyte(RTempBCD) ; @0x7f82
-	loadbyte(RTimeBCD) ; @0x7f83
+	loadbyte(SoakTempBCD) ; @0x7f80
+	loadbyte(SoakTimeBCD) ; @0x7f81
+	loadbyte(ReflowTempBCD) ; @0x7f82
+	loadbyte(ReflowTimeBCD) ; @0x7f83
 	loadbyte(#0x55) ; First key value @0x7f84
 	loadbyte(#0xAA) ; Second key value @0x7f85
 	mov FCON, #0x00 ; Page Buffer Mapping Disabled (FPS = 0)
@@ -419,18 +419,18 @@ Load_Configuration:
 	cjne R0, #0xAA, Load_Defaults
 	; Keys are good.  Get stored values.
 	mov dptr, #0x7f80
-	getbyte(STempBCD) ; 0x7f80
-	getbyte(STimeBCD) ; 0x7f81
-	getbyte(RTempBCD) ; 0x7f82
-	getbyte(RTimeBCD) ; 0x7f83
+	getbyte(SoakTempBCD) ; 0x7f80
+	getbyte(SoakTimeBCD) ; 0x7f81
+	getbyte(ReflowTempBCD) ; 0x7f82
+	getbyte(ReflowTimeBCD) ; 0x7f83
 ret
 
 ; Load defaults if 'keys' are incorrect
 Load_Defaults:
-	mov STempBCD, #150
-	mov STimeBCD, #45
-	mov RTempBCD, #225
-	mov RTimeBCD, #30
+	mov SoakTempBCD, #150
+	mov SoakTimeBCD, #45
+	mov ReflowTempBCD, #225
+	mov ReflowTimeBCD, #30
 ret
 
 updateDisplay:
@@ -440,22 +440,22 @@ updateDisplay:
         clr Updated
         ; Display Soak Temp
         Set_Cursor(2,1)
-        mov a, STempBCD
+        mov a, SoakTempBCD
         lcall SendToLCD
         
         ; Display Soak Time
         Set_Cursor(2,5)
-        mov a, STimeBCD
+        mov a, SoakTimeBCD
         lcall SendToLCD
         
         ; Display Reflow Temp
         Set_Cursor(2,9)
-        mov a, RTempBCD
+        mov a, ReflowTempBCD
         lcall SendToLCD
         
         ; Display Reflow Time
         Set_Cursor(2,13)
-        mov a, RTimeBCD
+        mov a, ReflowTimeBCD
         lcall SendToLCD
 
         ; Update the flash memory
@@ -466,7 +466,6 @@ ret
 
 reset:
     mov SP, #0x7F
-    lcall Timer2_Init
 
     mov P0M0, #0
     mov P0M1, #0
@@ -483,28 +482,29 @@ reset:
     setb Updated ; update the display on reset
 
     ; initialize values
-    mov STempBCD+0, #0x00
-    mov STempBCD+1, #0x00
-    mov STimeBCD+0, #0x00
-    mov STimeBCD+1, #0x00
-    mov RTempBCD+0, #0x00
-    mov RTempBCD+1, #0x00
-    mov RTimeBCD+0, #0x00
-    mov RTimeBCD+1, #0x00
-	mov STempHex+0, #0x00
-    mov STempHex+1, #0x00
-    mov STimeHex+0, #0x00
-    mov STimeHex+1, #0x00
-    mov RTempHex+0, #0x00
-    mov RTempHex+1, #0x00
-    mov RTimeHEx+0, #0x00
-    mov RTimeHex+1, #0x00
+    mov SoakTempBCD+0, #0x00
+    mov SoakTempBCD+1, #0x00
+    mov SoakTimeBCD+0, #0x00
+    mov SoakTimeBCD+1, #0x00
+    mov ReflowTempBCD+0, #0x00
+    mov ReflowTempBCD+1, #0x00
+    mov ReflowTimeBCD+0, #0x00
+    mov ReflowTimeBCD+1, #0x00
+	mov SoakTempHex+0, #0x00
+    mov SoakTempHex+1, #0x00
+    mov SoakTimeHex+0, #0x00
+    mov SoakTimeHex+1, #0x00
+    mov ReflowTempHex+0, #0x00
+    mov ReflowTempHex+1, #0x00
+    mov ReflowTimeHex+0, #0x00
+    mov ReflowTimeHex+1, #0x00
 
     mov bcd+0, #0x00
     mov bcd+1, #0x00
     mov bcd+2, #0x00
     mov bcd+3, #0x00
 
+    lcall Timer2_Init
     lcall InitSPI
     lcall LCD_4BIT
     lcall InitSerialPort
@@ -540,25 +540,25 @@ adjParameters:
         ifPressedJumpTo(RIGHT, adjSTemp010, 1)
         ifNotPressedJumpTo(UP, _adjSTemp100a)
             ; increment 100's of Soak Temp
-            mov a, STempBCD+1
+            mov a, SoakTempBCD+1
             add a, #0x01
             da a
             anl a, #0x0f
-            mov STempBCD+1, a
+            mov SoakTempBCD+1, a
             setb Updated
 
         _adjSTemp100a:     
         ifNotPressedJumpTo(DOWN, _adjSTemp100b)
             ; decrement 100's of Soak Temp
-            mov a, STempBCD+1
+            mov a, SoakTempBCD+1
             add a, #0x09
             da a
             anl a, #0x0f
-            mov STempBCD+1, a
+            mov SoakTempBCD+1, a
             setb Updated
 
         _adjSTemp100b:
-            ljmp updateDisplay ; update param display
+        lcall updateDisplay ; update param display
         
     ljmp adjSTemp100 
     
@@ -568,23 +568,23 @@ adjParameters:
         ifPressedJumpTo(RIGHT, adjSTemp001, 1)
         ifNotPressedJumpTo(UP, _adjSTemp010a)
             ; increment 10's of Soak Temp
-            mov a, STempBCD+0
+            mov a, SoakTempBCD+0
             add a, #0x10
             da a
-            mov STempBCD+0, a
+            mov SoakTempBCD+0, a
             setb Updated
 
         _adjSTemp010a:     
         ifNotPressedJumpTo(DOWN, _adjSTemp010b)
             ; decrement 10's of Soak Temp
-            mov a, STempBCD+0
+            mov a, SoakTempBCD+0
             add a, #0x90
             da a
-            mov STempBCD+0, a
+            mov SoakTempBCD+0, a
             setb Updated
 
         _adjSTemp010b:
-            ljmp updateDisplay ; update param display
+        lcall updateDisplay ; update param display
         
     ljmp adjSTemp010 
     
@@ -594,31 +594,31 @@ adjParameters:
         ifPressedJumpTo(RIGHT, adjSTime100, 1)
         ifNotPressedJumpTo(UP, _adjSTemp001a)
             ; increment 1's of Soak Temp
-            mov a, STempBCD+0
+            mov a, SoakTempBCD+0
             mov b, a
             add a, #0x01
             da a
             anl a, #0x0f
             anl b, #0xf0
             orl a, b
-            mov STempBCD+0, a
+            mov SoakTempBCD+0, a
             setb Updated
 
         _adjSTemp001a:     
         ifNotPressedJumpTo(DOWN, _adjSTemp001b)
             ; decrement 1's of Soak Temp
-            mov a, STempBCD+0
+            mov a, SoakTempBCD+0
             mov b, a
             add a, #0x09
             da a
             anl a, #0x0f
             anl b, #0xf0
             orl a, b
-            mov STempBCD+0, a
+            mov SoakTempBCD+0, a
             setb Updated
 
         _adjSTemp001b:
-            ljmp updateDisplay ; update param display
+        lcall updateDisplay ; update param display
         
     ljmp adjSTemp001
     
@@ -631,25 +631,25 @@ adjParameters:
         ifPressedJumpTo(RIGHT, adjSTime010, 1)
         ifNotPressedJumpTo(UP, _adjSTime100a)
             ; increment 100's of Soak Time
-            mov a, STimeBCD+1
+            mov a, SoakTimeBCD+1
             add a, #0x01
             da a
             anl a, #0x0f
-            mov STimeBCD+1, a
+            mov SoakTimeBCD+1, a
             setb Updated
 
         _adjSTime100a:     
         ifNotPressedJumpTo(DOWN, _adjSTime100b)
             ; decrement 100's of Soak Time
-            mov a, STimeBCD+1
+            mov a, SoakTimeBCD+1
             add a, #0x09
             da a
             anl a, #0x0f
-            mov STimeBCD+1, a
+            mov SoakTimeBCD+1, a
             setb Updated
 
         _adjSTime100b:
-            ljmp updateDisplay ; update param display
+        lcall updateDisplay ; update param display
         
     ljmp adjSTime100 
     
@@ -659,23 +659,23 @@ adjParameters:
         ifPressedJumpTo(RIGHT, adjSTime001, 1)
         ifNotPressedJumpTo(UP, _adjSTime010a)
             ; increment 10's of Soak Time
-            mov a, STimeBCD+0
+            mov a, SoakTimeBCD+0
             add a, #0x10
             da a
-            mov STimeBCD+0, a
+            mov SoakTimeBCD+0, a
             setb Updated
 
         _adjSTime010a:     
         ifNotPressedJumpTo(DOWN, _adjSTime010b)
             ; decrement 10's of Soak Time
-            mov a, STimeBCD+0
+            mov a, SoakTimeBCD+0
             add a, #0x90
             da a
-            mov STimeBCD+0, a
+            mov SoakTimeBCD+0, a
             setb Updated
 
         _adjSTime010b:
-            ljmp updateDisplay ; update param display
+        lcall updateDisplay ; update param display
         
     ljmp adjSTime010 
     
@@ -685,31 +685,31 @@ adjParameters:
         ifPressedJumpTo(RIGHT, adjRTemp100, 1)
         ifNotPressedJumpTo(UP, _adjSTime001a)
             ; increment 1's of Soak Time
-            mov a, STimeBCD+0
+            mov a, SoakTimeBCD+0
             mov b, a
             add a, #0x01
             da a
             anl a, #0x0f
             anl b, #0xf0
             orl a, b
-            mov STimeBCD+0, a
+            mov SoakTimeBCD+0, a
             setb Updated
 
         _adjSTime001a:     
         ifNotPressedJumpTo(DOWN, _adjSTime001b)
             ; decrement 1's of Soak Time
-            mov a, STimeBCD+0
+            mov a, SoakTimeBCD+0
             mov b, a
             add a, #0x09
             da a
             anl a, #0x0f
             anl b, #0xf0
             orl a, b
-            mov STimeBCD+0, a
+            mov SoakTimeBCD+0, a
             setb Updated
 
         _adjSTime001b:
-            ljmp updateDisplay ; update param display
+        lcall updateDisplay ; update param display
         
     ljmp adjSTime001
     
@@ -722,25 +722,25 @@ adjParameters:
         ifPressedJumpTo(RIGHT, adjRTemp010, 1)
         ifNotPressedJumpTo(UP, _adjRTemp100a)
             ; increment 100's of Reflow Temp
-            mov a, RTempBCD+1
+            mov a, ReflowTempBCD+1
             add a, #0x01
             da a
             anl a, #0x0f
-            mov RTempBCD+1, a
+            mov ReflowTempBCD+1, a
             setb Updated
 
         _adjRTemp100a:     
         ifNotPressedJumpTo(DOWN, _adjRTemp100b)
             ; decrement 100's of Reflow Temp
-            mov a, RTempBCD+1
+            mov a, ReflowTempBCD+1
             add a, #0x09
             da a
             anl a, #0x0f
-            mov RTempBCD+1, a
+            mov ReflowTempBCD+1, a
             setb Updated
 
         _adjRTemp100b:
-            ljmp updateDisplay ; update param display
+        lcall updateDisplay ; update param display
         
     ljmp adjRTemp100 
     
@@ -750,23 +750,23 @@ adjParameters:
         ifPressedJumpTo(RIGHT, adjRTemp001, 1)
         ifNotPressedJumpTo(UP, _adjRTemp010a)
             ; increment 10's of Reflow Temp
-            mov a, RTempBCD+0
+            mov a, ReflowTempBCD+0
             add a, #0x10
             da a
-            mov RTempBCD+0, a
+            mov ReflowTempBCD+0, a
             setb Updated
 
         _adjRTemp010a:     
         ifNotPressedJumpTo(DOWN, _adjRTemp010b)
             ; decrement 10's of Reflow Temp
-            mov a, RTempBCD+0
+            mov a, ReflowTempBCD+0
             add a, #0x90
             da a
-            mov RTempBCD+0, a
+            mov ReflowTempBCD+0, a
             setb Updated
 
         _adjRTemp010b:
-            ljmp updateDisplay ; update param display
+        lcall updateDisplay ; update param display
         
     ljmp adjRTemp010 
     
@@ -776,31 +776,31 @@ adjParameters:
         ifPressedJumpTo(RIGHT, adjRTime100, 1)
         ifNotPressedJumpTo(UP, _adjRTemp001a)
             ; increment 1's of Reflow Temp
-            mov a, RTempBCD+0
+            mov a, ReflowTempBCD+0
             mov b, a
             add a, #0x01
             da a
             anl a, #0x0f
             anl b, #0xf0
             orl a, b
-            mov RTempBCD+0, a
+            mov ReflowTempBCD+0, a
             setb Updated
 
         _adjRTemp001a:     
         ifNotPressedJumpTo(DOWN, _adjRTemp001b)
             ; decrement 1's of Reflow Temp
-            mov a, RTempBCD+0
+            mov a, ReflowTempBCD+0
             mov b, a
             add a, #0x09
             da a
             anl a, #0x0f
             anl b, #0xf0
             orl a, b
-            mov RTempBCD+0, a
+            mov ReflowTempBCD+0, a
             setb Updated
 
         _adjRTemp001b:
-            ljmp updateDisplay ; update param display
+        lcall updateDisplay ; update param display
         
     ljmp adjSTemp001
     
@@ -813,25 +813,25 @@ adjParameters:
         ifPressedJumpTo(RIGHT, adjRTime010, 1)
         ifNotPressedJumpTo(UP, _adjRTime100a)
             ; increment 100's of Reflow Time
-            mov a, RTimeBCD+1
+            mov a, ReflowTimeBCD+1
             add a, #0x01
             da a
             anl a, #0x0f
-            mov RTimeBCD+1, a
+            mov ReflowTimeBCD+1, a
             setb Updated
 
         _adjRTime100a:     
         ifNotPressedJumpTo(DOWN, _adjRTime100b)
             ; decrement 100's of Reflow Time
-            mov a, RTimeBCD+1
+            mov a, ReflowTimeBCD+1
             add a, #0x09
             da a
             anl a, #0x0f
-            mov RTimeBCD+1, a
+            mov ReflowTimeBCD+1, a
             setb Updated
 
         _adjRTime100b:
-            ljmp updateDisplay ; update param display
+        lcall updateDisplay ; update param display
         
     ljmp adjRTime100 
     
@@ -841,23 +841,23 @@ adjParameters:
         ifPressedJumpTo(RIGHT, adjRTime001, 1)
         ifNotPressedJumpTo(UP, _adjRTime010a)
             ; increment 10's of Reflow Time
-            mov a, RTimeBCD+0
+            mov a, ReflowTimeBCD+0
             add a, #0x10
             da a
-            mov RTimeBCD+0, a
+            mov ReflowTimeBCD+0, a
             setb Updated
 
         _adjRTime010a:     
         ifNotPressedJumpTo(DOWN, _adjRTime010b)
             ; decrement 10's of Reflow Time
-            mov a, RTimeBCD+0
+            mov a, ReflowTimeBCD+0
             add a, #0x90
             da a
-            mov RTimeBCD+0, a
+            mov ReflowTimeBCD+0, a
             setb Updated
 
         _adjRTime010b:
-            ljmp updateDisplay ; update param display
+        lcall updateDisplay ; update param display
         
     ljmp adjRTime010 
     
@@ -867,31 +867,31 @@ adjParameters:
         ifPressedJumpTo(RIGHT, ready, 1)
         ifNotPressedJumpTo(UP, _adjRTime001a)
             ; increment 1's of Reflow Time
-            mov a, RTimeBCD+0
+            mov a, ReflowTimeBCD+0
             mov b, a
             add a, #0x01
             da a
             anl a, #0x0f
             anl b, #0xf0
             orl a, b
-            mov RTimeBCD+0, a
+            mov ReflowTimeBCD+0, a
             setb Updated
 
         _adjRTime001a:     
         ifNotPressedJumpTo(DOWN, _adjRTime001b)
             ; decrement 1's of Reflow Time
-            mov a, RTimeBCD+0
+            mov a, ReflowTimeBCD+0
             mov b, a
             add a, #0x09
             da a
             anl a, #0x0f
             anl b, #0xf0
             orl a, b
-            mov RTimeBCD+0, a
+            mov ReflowTimeBCD+0, a
             setb Updated
 
         _adjRTime001b:
-            ljmp updateDisplay ; update param display
+        lcall updateDisplay ; update param display
         
     ljmp adjRTime001
 
@@ -908,40 +908,40 @@ ready:
     ;-------------------------------------------------;
     
     ; Update Soak Temp Hex
-    mov a, STempBCD+0
+    mov a, SoakTempBCD+0
     mov bcd+0, a
-    mov a, STempBCD+1
+    mov a, SoakTempBCD+1
     mov bcd+1, a
     lcall bcd2hex
-    mov STempHex+0, x+0
-    mov STempHex+1, x+1
+    mov SoakTempHex+0, x+0
+    mov SoakTempHex+1, x+1
 
     ; Update Soak Time Hex
-    mov a, STimeBCD+0
+    mov a, SoakTimeBCD+0
     mov bcd+0, a
-    mov a, STimeBCD+1
+    mov a, SoakTimeBCD+1
     mov bcd+1, a
     lcall bcd2hex
-    mov STimeHex+0, x+0
-    mov STimeHex+1, x+1
+    mov SoakTimeHex+0, x+0
+    mov SoakTimeHex+1, x+1
 
     ; Update Reflow Temp Hex
-    mov a, RTempBCD+0
+    mov a, ReflowTempBCD+0
     mov bcd+0, a
-    mov a, RTempBCD+1
+    mov a, ReflowTempBCD+1
     mov bcd+1, a
     lcall bcd2hex
-    mov RTempHex+0, x+0
-    mov RTempHex+1, x+1
+    mov ReflowTempHex+0, x+0
+    mov ReflowTempHex+1, x+1
 
     ; Update Reflow Time Hex
-    mov a, RTimeBCD+0
+    mov a, ReflowTimeBCD+0
     mov bcd+0, a
-    mov a, RTimeBCD+1
+    mov a, ReflowTimeBCD+1
     mov bcd+1, a
     lcall bcd2hex
-    mov RTimeHex+0, x+0
-    mov RTimeHex+1, x+1
+    mov ReflowTimeHex+0, x+0
+    mov ReflowTimeHex+1, x+1
 
     readyLoop:
         ifPressedJumpTo(STARTSTOP, RampToSoak, 1)
@@ -958,10 +958,12 @@ RampToSoak:
     Set_cursor(2, 1)
     Send_Constant_String(#R2Soak_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
-
-    ifPressedJumpTo(STARTSTOP, Cancelled, 1) ; Cancel if stop button pressed
-
-    ; 100% power till currentTemp >= STempHex
+    ; 100% power
+    RampToSoakLoop:
+        ifPressedJumpTo(STARTSTOP, Cancelled, 1) ; Cancel if stop button pressed
+        ; jmp to Soak if temp >= soak temp
+        ; update LCD
+    ljmp RampToSoakLoop
     
 ljmp RampToSoak
 
@@ -972,12 +974,11 @@ Soak:
     Set_cursor(2, 1)
     Send_Constant_String(#Soak_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
-
-    ifPressedJumpTo(STARTSTOP, Cancelled, 2) ; Cancel if stop button pressed
-
-    ; PID Implementation to maintain currentTemp = STempHex for STimeHex
-
-ljmp Soak
+    SoakLoop:
+        ifPressedJumpTo(STARTSTOP, Cancelled, 2) ; Cancel if stop button pressed
+        ; PID Implementation to maintain currentTemp = SoakTempHex for SoakTimeHex
+        ; update LCD
+    ljmp SoakLoop
 
 RampToReflow:
     ; display Ramp to Reflow message
@@ -986,12 +987,12 @@ RampToReflow:
     Set_cursor(2, 1)
     Send_Constant_String(#R2Reflow_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
-
-    ifPressedJumpTo(STARTSTOP, Cancelled, 3) ; Cancel if stop button pressed
-
-    ; 100% power till currentTemp = RTempHex
-
-ljmp RampToReflow
+    ; 100% power till currentTemp = ReflowTempHex
+    RampToReflowLoop:
+        ifPressedJumpTo(STARTSTOP, Cancelled, 3) ; Cancel if stop button pressed
+        ; jmp to reflow if temp >= reflow temp
+        ; update LCD
+    ljmp RampToReflowLoop
 
 Reflow:
     ; display Reflow message
@@ -1000,51 +1001,43 @@ Reflow:
     Set_cursor(2, 1)
     Send_Constant_String(#Reflow_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
-
-    ifPressedJumpTo(STARTSTOP, Cancelled, 4) ; Cancel if stop button pressed
-
-    ; PID Implementation to maintain currentTemp = RTempHex for RTimeHex
-
-ljmp Reflow
+    ReflowLoop:
+        ifPressedJumpTo(STARTSTOP, Cancelled, 4) ; Cancel if stop button pressed
+        ; PID Implementation to maintain currentTemp = ReflowTempHex for ReflowTimeHex
+        ; update LCD
+    ljmp ReflowLoop
 
 Cooling:
-    ; display Cooling message
-    Set_Cursor(1, 1)
+    Set_Cursor(1, 1) ; display Cooling message
     Send_Constant_String(#Cooling_display_1)
     Set_cursor(2, 1)
     Send_Constant_String(#Cooling_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
-
-    ifPressedJumpTo(STARTSTOP, Cancelled, 5) ; Cancel if stop button pressed
-
-    ; 0% power till currentTemp = 60
-
-ljmp Cooling
+    ; 0% power
+    CoolingLoop:
+        ; jmp to Safe/home if temp <= 60
+        ; update LCD
+    ljmp CoolingLoop
 
 Safe:
-    ; display Safe message
-    Set_Cursor(1, 1)
+    Set_Cursor(1, 1) ; display Safe message
     Send_Constant_String(#Safe_display_1)
     Set_cursor(2, 1)
     Send_Constant_String(#Safe_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
-
-    ifPressedJumpTo(STARTSTOP, Cancelled, 6) ; Cancel if stop button pressed
 
     ; safe to touch if currentTemp < 60
 
 ljmp Safe
 
 Cancelled:
-    ; display Cancelled message
-    Set_Cursor(1, 1)
+    Set_Cursor(1, 1) ; display Cancelled message
     Send_Constant_String(#Cancelled_display_1)
     Set_cursor(2, 1)
     Send_Constant_String(#Cancelled_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
-
-    ifPressedJumpTo(STARTSTOP, start, 1) ; Return to the menu if start button pressed
-
-ljmp Cancelled
+    CancelledLoop:
+        ifPressedJumpTo(STARTSTOP, start, 1) ; Return to the menu if start button pressed
+    ljmp CancelledLoop
 
 END
