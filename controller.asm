@@ -1222,7 +1222,8 @@ Done:
     mov waitCount, #0x00
     DoneLoop:
         ifPressedJumpTo(STARTSTOP, start, 1) ; Return to the menu if start button pressed
-        ; cjne waitCount, #30, DoneLoop ; wait 30 sec
+        mov a, waitCount
+        cjne a, #30, DoneLoop ; wait 30 sec
         clr waitflag
         ljmp start
 
@@ -1236,7 +1237,8 @@ Cancelled:
     mov waitCount, #0x00
     CancelledLoop:
         ifPressedJumpTo(STARTSTOP, start, 2) ; Return to the menu if start button pressed
-        ; cjne waitCount, #0x30, CancelledLoop ; wait 30 sec
+        mov a, waitCount
+        cjne a, #0x30, CancelledLoop ; wait 30 sec
         clr waitflag
         ljmp start
 END
