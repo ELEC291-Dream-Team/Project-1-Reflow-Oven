@@ -56,7 +56,7 @@ endmac
 
 BOOT_BUTTON   equ P4.5
 
-temperature: db 'Temperature (C):', 0
+temperature: db 'TempLCM:', 0
 
 INIT_SPI: 
     setb MY_MISO    ; Make MISO an input pin 
@@ -163,18 +163,18 @@ Convert:
 	
 ; Sends 10-digit BCD number in bcd to the LCD
 Display_10_digit_BCD:
-	Set_Cursor(2, 7)
-	Display_BCD(bcd+4)
-	Display_BCD(bcd+3)
-	Display_BCD(bcd+2)
+	Set_Cursor(1, 13)
+	;Display_BCD(bcd+4)
+	;Display_BCD(bcd+3)
+	;Display_BCD(bcd+2)
 	Display_BCD(bcd+1)
 	Display_BCD(bcd+0)
 	; Replace all the zeros to the left with blanks
-	Set_Cursor(2, 7)
-	Left_blank(bcd+4, skip_blank)
-	Left_blank(bcd+3, skip_blank)
-	Left_blank(bcd+2, skip_blank)
-	Left_blank(bcd+1, skip_blank)
+	Set_Cursor(1, 13)
+	;Left_blank(bcd+4, skip_blank)
+	;Left_blank(bcd+3, skip_blank)
+	;Left_blank(bcd+2, skip_blank)
+	;Left_blank(bcd+1, skip_blank)
 	mov a, bcd+0
 	anl a, #0f0h
 	swap a
@@ -238,5 +238,4 @@ delay:
 	inc r7
 	cjne r7, #4, delay
 	ret
-
 END
