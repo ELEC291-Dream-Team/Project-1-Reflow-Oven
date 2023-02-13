@@ -511,8 +511,7 @@ updateDisplay:
         mov a, ReflowTimeBCD
         lcall SendToLCD
 
-        ; Update the flash memory
-        lcall Save_Configuration
+        
 
     _updateDisplayDone:
 ret
@@ -533,16 +532,6 @@ reset:
     
     setb EA   ; Enable Global interrupts
     setb Updated ; update the display on reset
-
-    ; initialize values
-    zero2Bytes(SoakTempBCD)
-    zero2Bytes(SoakTimeBCD)
-    zero2Bytes(ReflowTempBCD)
-    zero2Bytes(ReflowTimeBCD)
-    zero2Bytes(SoakTempHex)
-    zero2Bytes(SoakTimeHex)
-    zero2Bytes(ReflowTempHex)
-    zero2Bytes(ReflowTimeHex)
 
     Load_x(0)
     lcall hex2bcd
@@ -948,10 +937,13 @@ ready:
     Send_Constant_String(#Ready_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
 
+    ; Update the flash memory
+    lcall Save_Configuration
+
     ;-------------------------------------------------;
     ;--------- Update Parameter Hex values -----------;
     ;-------------------------------------------------;
-    
+
     Load_x(0) ; clear the bcd
     lcall hex2bcd
     
