@@ -74,6 +74,7 @@ dseg at 0x30
     Counter1000ms: ds 2
     Counter100ms:  ds 1
     CounterPWM:    ds 1
+    waitCount:     ds 1
 ; parameter variables
     SoakTempBCD:   ds 2
     SoakTimeBCD:   ds 2
@@ -92,15 +93,10 @@ dseg at 0x30
 ; PWM variables
     PWMDutyCycle: ds 1
 
-temp_soak: ds 1
-time_soak: ds 1
-temp_refl: ds 1
-time_refl: ds 1
-
-
 bseg
-mf: dbit 1 ; math32 bit variable
-Updated: dbit 1 ; updated display flag
+mf:         dbit 1 ; math32 bit variable
+Updated:    dbit 1 ; updated display flag
+waitflag:   dbit 1 ; wait 30 sec flag
 
 cseg
 ;                      		1234567890123456
@@ -120,8 +116,8 @@ Reflow_display_1:       db '     Reflow     ', 0
 Reflow_display_2:       db 'Tmp:xxx Time:xxx', 0
 Cooling_display_1:      db '  Cooling Down  ', 0
 Cooling_display_2:      db 'Tmp:xxx Time:xxx', 0
-Safe_display_1:         db ' Safe to Handle ', 0
-Safe_display_2:         db 'Tmp:xxx Time:xxx', 0
+Done_display_1:         db ' Safe to Handle ', 0
+Done_display_2:         db '  Press Start   ', 0
 Cancelled_display_1:    db '   Cancelled    ', 0
 Cancelled_display_2:    db '  Press Start   ', 0
 
@@ -175,6 +171,8 @@ Timer2_ISR:
 	    clr a
 	    mov Counter1000ms+0, a
 	    mov Counter1000ms+1, a
+        jnb waitflag, Counter1000msnotOverflow
+        inc waitCount
     Counter1000msnotOverflow:
 
     ; if Counter100ms overflows
@@ -194,7 +192,7 @@ Timer2_ISR:
     cjne a, PWMDutyCycle, PWMNotSame
         clr OVEN
     PWMNotSame:
-    
+
     pop psw
 	pop acc
 reti
@@ -532,6 +530,7 @@ reset:
     
     setb EA   ; Enable Global interrupts
     setb Updated ; update the display on reset
+    clr waitflag ; waitflag off initially
 
     Load_x(0)
     lcall hex2bcd
@@ -1044,20 +1043,24 @@ Cooling:
     WriteCommand(#0x0c) ; hide cursor, no blink
     ; 0% power
     CoolingLoop:
-        ; jmp to Safe/home if temp <= 60
+        ; jmp to Done/home if temp <= 60
         ; update LCD
     ljmp CoolingLoop
 
-Safe:
-    Set_Cursor(1, 1) ; display Safe message
-    Send_Constant_String(#Safe_display_1)
+Done:
+    Set_Cursor(1, 1) ; display safe to handle message
+    Send_Constant_String(#Done_display_1)
     Set_cursor(2, 1)
-    Send_Constant_String(#Safe_display_2)
+    Send_Constant_String(#Done_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
-
     ; safe to touch if currentTemp < 60
-
-ljmp Safe
+    setb waitflag
+    mov waitCount, #0x00
+    DoneLoop:
+        ifPressedJumpTo(STARTSTOP, start, 1) ; Return to the menu if start button pressed
+        cjne waitCount, #30, DoneLoop ; wait 30 sec
+        clr waitflag
+        ljmp start
 
 Cancelled:
     Set_Cursor(1, 1) ; display Cancelled message
@@ -1065,8 +1068,11 @@ Cancelled:
     Set_cursor(2, 1)
     Send_Constant_String(#Cancelled_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
+    setb waitflag
+    mov waitCount, #0x00
     CancelledLoop:
-        ifPressedJumpTo(STARTSTOP, start, 1) ; Return to the menu if start button pressed
-    ljmp CancelledLoop
-
+        ifPressedJumpTo(STARTSTOP, start, 2) ; Return to the menu if start button pressed
+        cjne waitCount, #0x30, CancelledLoop ; wait 30 sec
+        clr waitflag
+        ljmp start
 END
