@@ -77,7 +77,10 @@ dseg at 0x30
     Counter1000ms: ds 2
     Counter100ms:  ds 1
     CounterPWM:    ds 1
-    waitCount:     ds 1
+    WaitCount:     ds 1
+    RunTime:       ds 2
+    WaitCountBCD:  ds 1
+    RunTimeBCD:    ds 2
 ; parameter variables
     SoakTempBCD:   ds 2
     SoakTimeBCD:   ds 2
@@ -100,9 +103,10 @@ dseg at 0x30
     PWMCompare:   ds 1
 
 bseg
-mf:         dbit 1 ; math32 bit variable
-Updated:    dbit 1 ; updated display flag
-waitflag:   dbit 1 ; wait 30 sec flag
+mf:          dbit 1 ; math32 bit variable
+Updated:     dbit 1 ; updated display flag
+WaitFlag:    dbit 1 ; wait 30 sec flag
+RunTimeFlag: dbit 1 ; start runtimer flag
 
 cseg
 ;                      		1234567890123456
@@ -123,9 +127,9 @@ Reflow_display_2:       db '  xxxC    xxxs  ', 0
 Cooling_display_1:      db '  Cooling Down  ', 0
 Cooling_display_2:      db '  xxxC    xxxs  ', 0
 Done_display_1:         db ' Safe to Handle ', 0
-Done_display_2:         db '  Home in xxxs  ', 0
+Done_display_2:         db '  Home in xxs   ', 0
 Cancelled_display_1:    db '   Cancelled    ', 0
-Cancelled_display_2:    db '  Home in xxxs  ', 0
+Cancelled_display_2:    db '  Home in xxs   ', 0
 
 zero2Bytes mac
     mov %0+0, #0x00
@@ -270,8 +274,11 @@ Timer2_ISR:
 	mov a, Counter1000ms+1
 	cjne a, #high(1000), Counter1000msnotOverflow
         zero2Bytes(Counter1000ms)
-        jnb waitflag, Counter1000msnotOverflow
-        dec waitCount
+        jnb RunTimeFlag, JumpLabel
+        inc RunTime
+        JumpLabel:
+        jnb WaitFlag, Counter1000msnotOverflow
+        dec WaitCount
     Counter1000msnotOverflow:
 
     ; if Counter100ms overflows
@@ -658,8 +665,9 @@ reset:
     mov PWMDutyCycle, #0x00
     
     setb EA   ; Enable Global interrupts
-    setb Updated ; update the display on reset
-    clr waitflag ; waitflag off initially
+    setb Updated ; Update the display on reset
+    clr WaitFlag ; WaitFlag off initially
+    clr RunTimeFlag ; RunTimeFlag off initially
 
     Load_x(0)
     lcall hex2bcd
@@ -1191,12 +1199,17 @@ RampToSoak:
     Set_cursor(2, 1)
     Send_Constant_String(#R2Soak_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
+    setb RunTimeFlag
+    mov RunTime, #0x00
     ; 100% power
     RampToSoakLoop:
         ifPressedJumpTo(STARTSTOP, Cancelled, 1) ; Cancel if stop button pressed
-        ; jmp to Soak if temp >= soak temp
-        ; update LCD
-    ljmp RampToSoakLoop
+        Set_Cursor(2,3)
+        LCDSend3BCD(OvenTempBCD)
+        Set_Cursor(2,11)
+        LCDSend3BCD(RunTimeBCD)
+        mov a, OvenTemp
+        cjne a, SoakTempHex, RampToSoakLoop ; Loop intil OvenTemp = SoakTemp
 
 Soak:
     ; display Soak message
@@ -1257,15 +1270,18 @@ Done:
     Send_Constant_String(#Done_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
     ; safe to touch if currentTemp < 60
-    setb waitflag
-    mov waitCount, #15
+    setb WaitFlag
+    mov WaitCount, #15
     DoneLoop:
         ifPressedJumpTo(STARTSTOP, start, 1) ; Return to the menu if start button pressed
-        mov a, waitCount
-        cjne a, #15, DoneLoop ; wait 15 sec
-        clr waitflag
         Set_Cursor(2,11)
-        LCDSend3BCD(waitCount)
+        mov x, WaitCount
+        lcall hex2bcd ; Convert WaitCount to BCD
+        mov WaitCountBCD, bcd+0
+        Display_BCD(WaitCountBCD) ; display WaitCount
+        mov a, WaitCount
+        cjne a, #15, DoneLoop ; wait 15 sec
+        clr WaitFlag
         ljmp start
 
 Cancelled:
@@ -1274,15 +1290,18 @@ Cancelled:
     Set_cursor(2, 1)
     Send_Constant_String(#Cancelled_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
-    setb waitflag
-    mov waitCount, #15
+    setb WaitFlag
+    mov WaitCount, #15
     zero2Bytes(Counter1000ms)
     CancelledLoop:
         ifPressedJumpTo(STARTSTOP, start, 2) ; Return to the menu if start button pressed
-        mov a, waitCount
-        cjne a, #0x00, CancelledLoop ; wait 15 sec
-        clr waitflag
         Set_Cursor(2,11)
-        LCDSend3BCD(waitCount)
+        mov x, WaitCount
+        lcall hex2bcd ; Convert WaitCount to BCD
+        mov WaitCountBCD, bcd+0
+        Display_BCD(WaitCountBCD) ; display WaitCount
+        mov a, WaitCount
+        cjne a, #0x00, CancelledLoop ; wait 15 sec
+        clr WaitFlag
         ljmp start
 END
