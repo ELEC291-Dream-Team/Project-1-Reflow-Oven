@@ -74,6 +74,8 @@ dseg at 30H
 	temperature: ds 2
     nextPlay: ds 1
     BCD: ds 5
+	FlashReadAddr: ds 3
+
 
 	w:   ds 3 ; 24-bit play counter.  Decremented in Timer 1 ISR.
 
@@ -90,37 +92,44 @@ bseg
 	
 cseg
 
+ jnb P4.5, $ ; Wait for push-button release
+	    ; Play the whole memory
+	    clr TR1 ; Stop Timer 1 ISR from playing previous request
+	    clr SPEAKER ; Turn off speaker.
+    
+        ; set starting address
+	    mov FlashReadAddr+2, #0x00
+	    mov FlashReadAddr+1, #0x00
+	    mov FlashReadAddr+0, #0x00
+    
+	    ; How many bytes to play? All of them!  Asume 4Mbytes memory: 0x3fffff
+	    mov w+2, #0x00
+	    mov w+1, #0x56
+	    mov w+0, #0x22
+    
+	    setb SPEAKER ; Turn on speaker.
+	    setb TR1 ; Start playback by enabling Timer 1
+
+
 SPEAK MAC
 	clr a
 	Load_x(%0)
 	Load_y(0x2b11)
 	lcall mul32
+
 	clr TR1 ; Stop Timer 1 ISR from playing previous request
-	setb FLASH_CE
-	    clr SPEAKER ; Turn off speaker.
-    
-	    clr FLASH_CE ; Enable SPI Flash
-	    mov a, #READ_BYTES
-	    lcall Send_SPI
-	    ; Set the initial position in memory where to start playing
-	    mov a, x+2
-	    lcall Send_SPI
-	    mov a, x+1
-	    lcall Send_SPI
-	    mov a, x+0
-	    ; mov a, #0x2b
-	    lcall Send_SPI
-	    ; mov a, x+0 ; Request first byte to send to DAC
-	    mov a, #0x00 ; Request first byte to send to DAC
-	    lcall Send_SPI
-    
-	    ; How many bytes to play? All of them!  Asume 4Mbytes memory: 0x3fffff
-	    mov w+2, #0x00
-	    mov w+1, #0x2b
-	    mov w+0, #0x11
-    
-	    setb SPEAKER ; Turn on speaker.
-	    setb TR1 ; Start playback by enabling Timer 1
+	clr SPEAKER ; Turn off speaker.
+    ; set starting address
+	mov FlashReadAddr+2, x+2
+	mov FlashReadAddr+1, x+1
+	mov FlashReadAddr+0, x+0
+	; How many bytes to play? All of them!  Asume 4Mbytes memory: 0x3fffff
+	mov w+2, #0x00
+    mov w+1, #0x2b
+    mov w+0, #0x11
+
+    setb SPEAKER ; Turn on speaker.
+   	setb TR1 ; Start playback by enabling Timer 1
 	ENDMAC
 
 
@@ -149,16 +158,42 @@ Timer1_ISR:
 	dec w+2
 	
     keep_playing:
-	setb SPEAKER
-	lcall Send_SPI ; Read the next byte from the SPI Flash...
-	mov P0, a ; WARNING: Remove this if not using an external DAC to use the pins of P0 as GPIO
+	; setb SPEAKER
+    clr FLASH_CE ; Enable SPI Flash
+
+    ; refer to datasheet page 27 
+    ; https://www.winbond.com/resource-files/w25q32jv%20spi%20revc%2008302016.pdf
+	mov a, #READ_BYTES
+	lcall Send_SPI
+	mov a, FlashReadAddr+2
+	lcall Send_SPI
+	mov a, FlashReadAddr+1
+	lcall Send_SPI
+	mov a, FlashReadAddr+0
+	lcall Send_SPI
+    mov a, #0x00
+	lcall Send_SPI
+
+    setb FLASH_CE
+	; mov P0, a ; WARNING: Remove this if not using an external DAC to use the pins of P0 as GPIO
 	add a, #0x80
 	mov DADH, a ; Output to DAC. DAC output is pin P2.3
 	orl DADC, #0b_0100_0000 ; Start DAC by setting GO/BSY=1
+
+    ; increment address by 1
+    inc FlashReadAddr+0
+    mov a, FlashReadAddr+0
+    jnz incrementAddressDone
+    inc FlashReadAddr+1
+    mov a, FlashReadAddr+1
+    jnz incrementAddressDone
+    inc FlashReadAddr+2
+    mov a, FlashReadAddr+2
+    incrementAddressDone:
 	sjmp Timer1_ISR_Done
 
     stop_playing:
-        setb CANPLAY
+		setb CANPLAY
 	    clr TR1 ; Stop timer 1
 	    setb FLASH_CE  ; Disable SPI Flash
 	    clr SPEAKER ; Turn off speaker.  Removes hissing noise when not playing sound.
