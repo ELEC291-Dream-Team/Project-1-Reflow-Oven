@@ -7,7 +7,7 @@ org 0x000B ; Timer/Counter 0 overflow interrupt vector
 org 0x0013 ; External interrupt 1 vector (not used in this code)
 	reti
 org 0x001B ; Timer/Counter 1 overflow interrupt vector (not used in this code)
-	reti
+	ljmp Timer1_ISR
 org 0x0023 ; Serial port receive/transmit interrupt vector (not used in this code)
 	reti
 org 0x002B ; Timer/Counter 2 overflow interrupt vector
@@ -20,21 +20,24 @@ $include(math32.inc)
 $LIST
 
 CLK           equ 22122000 ; Microcontroller system crystal frequency in Hz
+TIMER1_RATE   equ 22050     ; 22050Hz is the sampling rate of the wav file we are playing
+TIMER1_RELOAD equ 0x10000-(CLK/TIMER1_RATE)
 TIMER2_RATE   equ 1000     ; 1000Hz, for a timer tick of 1ms
 TIMER2_RELOAD equ ((65536-(CLK/TIMER2_RATE)))
-BAUD          equ 115200
-BRG_VAL       equ (0x100-(CLK/(16*BAUD)))
+BAUDRATE      equ 115200
+BRG_VAL       equ (0x100-(CLK/(16*BAUDRATE)))
 
 PWM_PERIOD equ 200
 
 ; io pins
 LEFT      equ P2.0
 RIGHT     equ P2.3
-UP        equ P2.3
-DOWN      equ P2.5
-STARTSTOP equ P2.4
-SPEAKER_E equ P2.3
-OVEN      equ P2.2
+; RIGHT     equ P4.5 ; boot button for debugging
+UP        equ P2.6
+DOWN      equ P2.6
+STARTSTOP equ P2.6
+SPEAKER_E equ P2.4
+OVEN      equ P2.7
 
 ; LCD pin mapping
 LCD_D7 equ P1.0
@@ -91,6 +94,7 @@ dseg at 0x30
     HotTemp:  ds 4
 ; PWM variables
     PWMDutyCycle: ds 1
+    PWMCompare:   ds 1
 
 temp_soak: ds 1
 time_soak: ds 1
@@ -129,6 +133,99 @@ zero2Bytes mac
     mov %0+0, #0x00
     mov %0+1, #0x00
 endmac
+
+DAC_Init:
+    ; Configure the DAC.  The DAC output we are using is P2.3, but P2.2 is also reserved.
+	mov DADI, #0b_1010_0000 ; ACON=1
+	mov DADC, #0b_0011_1010 ; Enabled, DAC mode, Left adjusted, CLK/4
+	mov DADH, #0x80 ; Middle of scale
+	mov DADL, #0
+	orl DADC, #0b_0100_0000 ; Start DAC by GO/BSY=1
+    check_DAC_init:
+	mov a, DADC
+	jb acc.6, check_DAC_init ; Wait for DAC to finish
+ret
+
+Timer1_Init:
+    ; Configure timer 1
+	anl	TMOD, #0x0F ; Clear the bits of timer 1 in TMOD
+	orl	TMOD, #0x10 ; Set timer 1 in 16-bit timer mode.  Don't change the bits of timer 0
+	mov TH1, #high(TIMER1_RELOAD)
+	mov TL1, #low(TIMER1_RELOAD)
+	; Set autoreload value
+	mov RH1, #high(TIMER1_RELOAD)
+	mov RL1, #low(TIMER1_RELOAD)
+
+	; Enable the timer and interrupts
+    setb ET1  ; Enable timer 1 interrupt
+	; setb TR1 ; Timer 1 is only enabled to play stored sound
+    clr TR1
+ret
+
+Timer1_ISR:
+	; The registers used in the ISR must be saved in the stack
+	push acc
+	push psw
+	
+	; Check if the play counter is zero.  If so, stop playing sound.
+	mov a, w+0
+	orl a, w+1
+	orl a, w+2
+	jz stop_playing
+	
+	; Decrement play counter 'w'.  In this implementation 'w' is a 24-bit counter.
+	mov a, #0xff
+	dec w+0
+	cjne a, w+0, keep_playing
+	dec w+1
+	cjne a, w+1, keep_playing
+	dec w+2
+	
+    keep_playing:
+	; setb SPEAKER
+    clr CS_FLASH ; Enable SPI Flash
+
+    ; refer to datasheet page 27 
+    ; https://www.winbond.com/resource-files/w25q32jv%20spi%20revc%2008302016.pdf
+	mov a, #READ_BYTES
+	lcall Send_SPI
+	mov a, FlashReadAddr+2
+	lcall Send_SPI
+	mov a, FlashReadAddr+1
+	lcall Send_SPI
+	mov a, FlashReadAddr+0
+	lcall Send_SPI
+    mov a, #0x00
+	lcall Send_SPI
+
+    setb CS_FLASH
+	; mov P0, a ; WARNING: Remove this if not using an external DAC to use the pins of P0 as GPIO
+	add a, #0x80
+	mov DADH, a ; Output to DAC. DAC output is pin P2.3
+	orl DADC, #0b_0100_0000 ; Start DAC by setting GO/BSY=1
+
+    ; increment address by 1
+    inc FlashReadAddr+0
+    mov a, FlashReadAddr+0
+    jnz incrementAddressDone
+    inc FlashReadAddr+1
+    mov a, FlashReadAddr+1
+    jnz incrementAddressDone
+    inc FlashReadAddr+2
+    incrementAddressDone:
+	sjmp Timer1_ISR_Done
+
+    stop_playing:
+	    clr TR1 ; Stop timer 1
+	    setb CS_FLASH  ; Disable SPI Flash
+	    clr SPEAKER_E ; Turn off speaker.  Removes hissing noise when not playing sound.
+	    mov DADH, #0x80 ; middle of range
+	    orl DADC, #0b_0100_0000 ; Start DAC by setting GO/BSY=1
+
+    Timer1_ISR_Done:	
+	pop psw
+	pop acc
+reti
 
 Timer2_Init:
 	mov T2CON, #0 ; Stop timer/counter.  Autoreload mode.
@@ -189,9 +286,10 @@ Timer2_ISR:
 	    clr a
 	    mov CounterPWM, a
         setb OVEN
+        mov PWMCompare, PWMDutyCycle
     CounterPWMnotOverflow:
     mov a, CounterPWM
-    cjne a, PWMDutyCycle, PWMNotSame
+    cjne a, PWMCompare, PWMNotSame
         clr OVEN
     PWMNotSame:
     
@@ -199,7 +297,7 @@ Timer2_ISR:
 	pop acc
 reti
 
-readVoltageChannel mac ; stores the voltage in x in mV
+readADCChannel mac ; stores ADC in x
     Load_x(0)
 
     clr EA
@@ -218,7 +316,10 @@ readVoltageChannel mac ; stores the voltage in x in mV
 
     setb CS_ADC
     setb EA
-    
+endmac
+
+readVoltageChannel mac ; stores the voltage in x in mV
+    readADCChannel(%0)
     Load_y(38)
     lcall mul32
     Load_y(35)
@@ -286,15 +387,16 @@ InitSPI:
     setb CS_FLASH
     setb SPI_MISO
     clr SPI_SCLK
+    clr SPEAKER_E
 ret
 
 InitSerialPort:
     ; Since the reset button bounces, we need to wait a bit before
     ; sending messages, otherwise we risk displaying gibberish!
-    mov R1, #222
-    mov R0, #166
-    djnz R0, $   ; 3 cycles->3*45.21123ns*166=22.51519us
-    djnz R1, $-4 ; 22.51519us*222=4.998ms
+    ; mov R1, #222
+    ; mov R0, #166
+    ; djnz R0, $   ; 3 cycles->3*45.21123ns*166=22.51519us
+    ; djnz R1, $-4 ; 22.51519us*222=4.998ms
     ; Now we can proceed with the configuration
 	orl	PCON, #0x80
 	mov	SCON, #0x52
@@ -348,6 +450,22 @@ LCDSendString:
     sjmp LCDSendString
     LCDSendStringDone:
 ret
+
+LCDSend3BCD mac
+    mov a, %0+1
+    anl a, #0x0f
+    orl a, #0x30
+    lcall ?WriteData
+    mov a, %0+0
+    swap a
+    anl a, #0x0f
+    orl a, #0x30
+    lcall ?WriteData
+    mov a, %0+0
+    anl a, #0x0f
+    orl a, #0x30
+    lcall ?WriteData
+endmac
 
 ifPressedJumpTo mac
     jb %0, %0%1%2noPress
@@ -493,25 +611,19 @@ updateDisplay:
         clr Updated
         ; Display Soak Temp
         Set_Cursor(2,1)
-        mov a, SoakTempBCD
-        lcall SendToLCD
+        LCDSend3BCD(SoakTempBCD)
         
         ; Display Soak Time
         Set_Cursor(2,5)
-        mov a, SoakTimeBCD
-        lcall SendToLCD
+        LCDSend3BCD(SoakTimeBCD)
         
         ; Display Reflow Temp
         Set_Cursor(2,9)
-        mov a, ReflowTempBCD
-        lcall SendToLCD
+        LCDSend3BCD(ReflowTempBCD)
         
         ; Display Reflow Time
         Set_Cursor(2,13)
-        mov a, ReflowTimeBCD
-        lcall SendToLCD
-
-        
+        LCDSend3BCD(ReflowTimeBCD)
 
     _updateDisplayDone:
 ret
@@ -529,6 +641,14 @@ reset:
     mov P3M1, #0
     mov P4M0, #0
     mov P4M1, #0
+
+    setb LEFT
+    setb RIGHT
+    setb UP
+    setb DOWN
+    setb STARTSTOP
+    setb SPEAKER_E
+    setb OVEN
     
     setb EA   ; Enable Global interrupts
     setb Updated ; update the display on reset
@@ -536,11 +656,13 @@ reset:
     Load_x(0)
     lcall hex2bcd
 
+    lcall DAC_Init
+    lcall Timer1_Init
     lcall Timer2_Init
     lcall InitSPI
     lcall LCD_4BIT
-    lcall InitSerialPort
     lcall Load_Configuration ; Update parameters with flash memory
+    lcall InitSerialPort
 
 start:
     ; display start message
@@ -552,6 +674,7 @@ start:
 
     startLoop:
         ifPressedJumpTo(STARTSTOP, adjustParameters, 1)
+        ifPressedJumpTo(RIGHT, adjustParameters, 1)
     ljmp startLoop
 ; end of start state
 
@@ -835,7 +958,7 @@ adjustParameters:
         _adjustReflowTemp001b:
         lcall updateDisplay ; update param display
         
-    ljmp adjustSoakTemp001
+    ljmp adjustReflowTemp001
     
     ; ----------------------------------------------;
 	; --------------- Reflow Time ------------------;
