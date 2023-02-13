@@ -123,9 +123,9 @@ Reflow_display_2:       db '  xxxC    xxxs  ', 0
 Cooling_display_1:      db '  Cooling Down  ', 0
 Cooling_display_2:      db '  xxxC    xxxs  ', 0
 Done_display_1:         db ' Safe to Handle ', 0
-Done_display_2:         db '  Press Start   ', 0
+Done_display_2:         db '  Home in xxxs  ', 0
 Cancelled_display_1:    db '   Cancelled    ', 0
-Cancelled_display_2:    db '  Press Start   ', 0
+Cancelled_display_2:    db '  Home in xxxs  ', 0
 
 zero2Bytes mac
     mov %0+0, #0x00
@@ -271,7 +271,7 @@ Timer2_ISR:
 	cjne a, #high(1000), Counter1000msnotOverflow
         zero2Bytes(Counter1000ms)
         jnb waitflag, Counter1000msnotOverflow
-        inc waitCount
+        dec waitCount
     Counter1000msnotOverflow:
 
     ; if Counter100ms overflows
@@ -1224,12 +1224,14 @@ Done:
     WriteCommand(#0x0c) ; hide cursor, no blink
     ; safe to touch if currentTemp < 60
     setb waitflag
-    mov waitCount, #0x00
+    mov waitCount, #15
     DoneLoop:
         ifPressedJumpTo(STARTSTOP, start, 1) ; Return to the menu if start button pressed
         mov a, waitCount
-        cjne a, #30, DoneLoop ; wait 30 sec
+        cjne a, #15, DoneLoop ; wait 15 sec
         clr waitflag
+        Set_Cursor(2,11)
+        LCDSend3BCD(waitCount)
         ljmp start
 
 Cancelled:
@@ -1239,11 +1241,13 @@ Cancelled:
     Send_Constant_String(#Cancelled_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
     setb waitflag
-    mov waitCount, #0x00
+    mov waitCount, #15
     CancelledLoop:
         ifPressedJumpTo(STARTSTOP, start, 2) ; Return to the menu if start button pressed
         mov a, waitCount
-        cjne a, #0x30, CancelledLoop ; wait 30 sec
+        cjne a, #0x00, CancelledLoop ; wait 15 sec
         clr waitflag
+        Set_Cursor(2,11)
+        LCDSend3BCD(waitCount)
         ljmp start
 END
