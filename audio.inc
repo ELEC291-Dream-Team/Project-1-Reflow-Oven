@@ -35,12 +35,11 @@ cseg
 
 StartPlayingAt mac
 	mov a, %0
-	lcall ?WriteCommand
+	lcall ?startPlaying
 endmac
 
-?StartPlaying:
+?startPlaying:
 	;needs to be written
-
 ret
 
 StopPlaying mac
