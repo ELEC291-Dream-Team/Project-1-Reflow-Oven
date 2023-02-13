@@ -19,11 +19,10 @@
 ;
 ; WARNING: Pins P2.2 and P2.3 are the DAC outputs and can not be used for anything else
 
-$NOLIST
-$MODLP51RC2
-$LIST
-org 0x0000 ; Reset vector
-    ljmp MainProgram
+org 0000H
+   ljmp reset
+; org 0x0000 ; Reset vector
+;     ljmp MainProgram
 org 0x0003 ; External interrupt 0 vector (not used in this code)
 	reti
 org 0x000B ; Timer/Counter 0 overflow interrupt vector (not used in this code)
@@ -38,14 +37,38 @@ org 0x005b ; Timer 2 interrupt vector. (not used in this code)
 	reti
 org 0x0063 ; ADC interrupt (vector must be present if debugger is used)
 	reti
-	
+
+$NOLIST
+$MODLP51RC2
+$include(LCD_4bit.inc)
+$include(math32.inc)
+$LIST
+
 SYSCLK         EQU 22118400  ; Microcontroller system clock frequency in Hz
 TIMER1_RATE    EQU 22050     ; 22050Hz is the sampling rate of the wav file we are playing
 TIMER1_RELOAD  EQU 0x10000-(SYSCLK/TIMER1_RATE)
 BAUDRATE       EQU 115200
 BRG_VAL        EQU (0x100-(SYSCLK/(16*BAUDRATE)))
 
-SPEAKER  EQU P2.4 ; Used with a MOSFET to turn off speaker when not in use
+; LCD pin mapping
+LCD_RS equ P1.5
+; LCD_RW equ Px.x ; Always grounded
+LCD_E  equ P1.4
+LCD_D4 equ P1.3
+LCD_D5 equ P1.2
+LCD_D6 equ P1.1
+LCD_D7 equ P1.0
+
+; SPI pin mapping
+ADC_CS   equ P3.6
+; SPI_MOSI equ P2.5
+; SPI_MISO equ P2.6
+; SPI_SCLK equ P2.7
+SPI_MOSI equ P3.3
+SPI_MISO equ P3.4
+SPI_SCLK equ P3.2
+
+SPEAKER  EQU P2.4 ; Used with a MOSFET to turn off speaker when not in usebcd
 
 ; The pins used for SPI
 FLASH_CE  EQU  P3.5
@@ -66,32 +89,25 @@ ERASE_ALL        EQU 0xc7  ; Address:0 Dummy:0 Num:0
 ERASE_BLOCK      EQU 0xd8  ; Address:3 Dummy:0 Num:0
 READ_DEVICE_ID   EQU 0x9f  ; Address:0 Dummy:2 Num:1 to infinite
 
-
 ; Variables used in the program:
 dseg at 30H
-	x: ds 4
-	y: ds 4
-	temperature: ds 2
-    nextPlay: ds 1
-    BCD: ds 5
-	FlashReadAddr: ds 3
-
-
+    x:   ds 4
+    y:   ds 4
+    bcd: ds 5
 	w:   ds 3 ; 24-bit play counter.  Decremented in Timer 1 ISR.
+    FlashReadAddr: ds 3
+    nextPlay: ds 1 ;added for the playing full temp.
+    temperature: ds 2
+    ; temp variables
+ColdTemp: ds 4
+HotTemp: ds 4
 
-bseg
-	
-	
-	mf: dbit 1 ; Message flag.  Set to 1 when a message is received.
-    CANPLAY: dbit 1 ; flag to indicate audio is playable
-	$NOLIST
-	$include(math32.inc)
-	$LIST
-	
+BSEG
+    mf: dbit 1
+    CANPLAY: dbit 1
 
-	
+; Interrupt vectors:
 cseg
-
 SPEAK MAC
 	clr a
 	Load_x(%0)
@@ -113,6 +129,64 @@ SPEAK MAC
    	setb TR1 ; Start playback by enabling Timer 1
 	ENDMAC
 
+readVoltageChannel mac ; stores the voltage in x in mV
+    Load_x(0)
+
+    clr EA
+    clr ADC_CS ; Enable device (active low)
+
+    mov a, #0x01
+    lcall Send_SPI
+    mov a, #%0
+    swap a
+    orl a, #0x80
+    lcall Send_SPI
+    anl a, #0x03
+    mov x+1, a
+    lcall Send_SPI
+    mov x+0, a
+    
+    setb ADC_CS
+    setb EA
+
+    Load_y(38)
+    lcall mul32
+    Load_y(35)
+    lcall add32
+    Load_y(10)
+    lcall div32
+endmac
+
+ReadTemp: ; stores temp in x in hex
+    readVoltageChannel(1)
+    Load_y(297)
+    lcall mul32
+    Load_y(2950)
+    lcall div32
+    Load_y(273)
+    lcall sub32
+    mov ColdTemp+3, x+3
+    mov ColdTemp+2, x+2
+    mov ColdTemp+1, x+1
+    mov ColdTemp+0, x+0
+    readVoltageChannel(6)
+    Load_y(1000)
+    lcall mul32
+    Load_y(12341)
+    lcall div32
+    mov HotTemp+3, x+3
+    mov HotTemp+2, x+2
+    mov HotTemp+1, x+1
+    mov HotTemp+0, x+0
+    
+    mov y+3, ColdTemp+3
+    mov y+2, ColdTemp+2
+    mov y+1, ColdTemp+1
+    mov y+0, ColdTemp+0
+    lcall add32
+
+    lcall hex2bcd
+ret
 
 ;-------------------------------------;
 ; ISR for Timer 1.  Used to playback  ;
@@ -174,7 +248,7 @@ Timer1_ISR:
 	sjmp Timer1_ISR_Done
 
     stop_playing:
-		setb CANPLAY
+        setb CANPLAY
 	    clr TR1 ; Stop timer 1
 	    setb FLASH_CE  ; Disable SPI Flash
 	    clr SPEAKER ; Turn off speaker.  Removes hissing noise when not playing sound.
@@ -200,7 +274,6 @@ Send_SPI:
 		clr MY_SCLK
 		mov acc.0, c
 	ENDMAC
-	
 	
 	SPIBIT(7)
 	SPIBIT(6)
@@ -240,6 +313,15 @@ Init_all:
 	mov	BRL,#BRG_VAL
 	mov	BDRCON,#0x1E ; BDRCON=BRR|TBCK|RBCK|SPD;
 	
+    setb CANPLAY
+    clr a
+    mov nextPlay, a
+    mov SP, #0x7f ; Setup stack pointer to the start of indirectly accessable data memory minus one
+    lcall Init_all ; Initialize the hardware 
+    mov temperature+1, #9
+    mov temperature+0, #0x63
+
+
 	; Configure SPI pins and turn off speaker
 	anl P2M0, #0b_1100_1110
 	orl P2M1, #0b_0011_0001
@@ -281,35 +363,65 @@ Init_all:
 	
 ret
 
-;---------------------------------;
-; Main program. Includes hardware ;
-; initialization and 'forever'    ;
-; loop.                           ;
-;---------------------------------;
-MainProgram:
-    setb CANPLAY
-    clr a
-    mov nextPlay, a
-    mov SP, #0x7f ; Setup stack pointer to the start of indirectly accessable data memory minus one
-    lcall Init_all ; Initialize the hardware 
-    mov temperature+1, #9
-    mov temperature+0, #0x63
-    sjmp forever_loop
+InitSPI:
+    setb ADC_CS
+    setb SPI_MISO
+    clr SPI_SCLK
+ret
+
+LCDSendString:
+    clr A
+    movc A, @A+DPTR
+    jz LCDSendStringDone
+    lcall ?WriteData
+    inc DPTR
+    sjmp LCDSendString
+    LCDSendStringDone:
+ret
+
+;                     1234567890123456
+Initial_Message1: db 'Ch1:    mV     C', 0
+Initial_Message2: db 'Ch6:    mV      ', 0
+
+reset:
+    mov SP, #7FH ; Set the stack pointer to the begining of idata
+
+    mov P0M0, #0x00
+    mov P0M1, #0x00
+    mov P1M0, #0x00
+    mov P1M1, #0x00
+    mov P2M0, #0x00
+    mov P2M1, #0x00
+    mov P3M0, #0x00
+    mov P3M1, #0x00
+    mov P4M0, #0x00
+    mov P4M1, #0x00
+
+    lcall Init_all ; Initialize the hardware  
+    lcall InitSPI
+    lcall LCD_4BIT
+
+    Set_Cursor(1, 1)
+    mov DPTR, #Initial_Message1
+    lcall LCDSendString
+    Set_Cursor(2, 1)
+    mov DPTR, #Initial_Message2
+    lcall LCDSendString
     
     ;intermediate jump ignore
     end_audio_short:
     ljmp end_audio
     ;
+
+    loop:
+        mov a, nextPlay
+        cjne a, #3, end_audio_short
+        jnb CANPLAY, end_audio_short
     
-    forever_loop:
-    mov a, nextPlay
-    cjne a, #3, end_audio_short
-    jnb CANPLAY, end_audio_short
     
-    
-    clr CANPLAY
-    mov a, nextPlay
-    cjne a, #0, NOTHUND
+        clr CANPLAY
+        mov a, nextPlay
+        cjne a, #0, NOTHUND
     	SPEAK(low(temperature+1))
     	mov nextPlay, #1
     	ljmp end_audio
@@ -322,12 +434,63 @@ MainProgram:
     	mov nextPlay, #3
     	SPEAK(low(temperature+0))
     end_audio:
-	    ; jb RI, serial_get
-	    jb P4.5, end_all ; Check if push-button pressed
+        jb P4.5, skip_button ; Check if push-button pressed
 	    jnb P4.5, $ ; Wait for push-button release
         clr a
         mov nextPlay, a
-	end_all:
-	ljmp forever_loop
+    skip_button:
+        readVoltageChannel(1)
+        lcall hex2bcdg
+        Set_Cursor(1, 5)
+        Display_BCD(bcd+1)
+        Display_BCD(bcd+0)
+
+        readVoltageChannel(6)
+        lcall hex2bcd
+        Set_Cursor(2, 5)
+        Display_BCD(bcd+1)
+        Display_BCD(bcd+0)
+
+        lcall ReadTemp
+        Set_Cursor(1, 12)
+        Display_BCD(bcd+1)
+        Display_BCD(bcd+0)
+
+        Wait_Milli_Seconds(#100)
+
+        ; for debugging sound address
+        ; Set_Cursor(2, 1)
+        ; mov x+3, #0x00
+        ; mov x+2, FlashReadAddr+2
+        ; mov x+1, FlashReadAddr+1
+        ; mov x+0, FlashReadAddr+0
+        ; lcall hex2bcd
+        ; Display_BCD(bcd+4)
+        ; Display_BCD(bcd+3)
+        ; Display_BCD(bcd+2)
+        ; Display_BCD(bcd+1)
+        ; Display_BCD(bcd+0)
+        
+        jb P4.5, nopress ; Check if push-button pressed
+	    jnb P4.5, $ ; Wait for push-button release
+	    ; Play the whole memory
+	    clr TR1 ; Stop Timer 1 ISR from playing previous request
+	    clr SPEAKER ; Turn off speaker.
+    
+        ; set starting address
+	    mov FlashReadAddr+2, #0x00
+	    mov FlashReadAddr+1, #0x00
+	    mov FlashReadAddr+0, #0x00
+    
+	    ; How many bytes to play? All of them!  Asume 4Mbytes memory: 0x3fffff
+	    mov w+2, #0x00
+	    mov w+1, #0x56
+	    mov w+0, #0x22
+    
+	    setb SPEAKER ; Turn on speaker.
+	    setb TR1 ; Start playback by enabling Timer 1
+    nopress:
+    end_all:
+    ljmp loop 
 
 END
