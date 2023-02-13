@@ -73,6 +73,7 @@ dseg at 30H
 	y: ds 4
 	temperature: ds 2
     nextPlay: ds 1
+    BCD: ds 5
 
 	w:   ds 3 ; 24-bit play counter.  Decremented in Timer 1 ISR.
 
@@ -89,7 +90,7 @@ bseg
 	
 cseg
 
-SAY MAC
+SPEAK MAC
 	clr a
 	Load_x(%0)
 	Load_y(0x2b11)
@@ -277,25 +278,40 @@ MainProgram:
     lcall Init_all ; Initialize the hardware 
     mov temperature+1, #9
     mov temperature+0, #0b_0110_0011
+    sjmp forever_loop
+    
+    ;intermediate jump ignore
+    end_audio_short:
+    ljmp end_audio
+    ;
     
     forever_loop:
-    cjne nextPlay, #3, end_audio
-    jnb CANPLAY, end_audio
+    mov a, nextPlay
+    cjne a, #3, end_audio_short
+    jnb CANPLAY, end_audio_short
+    
+    
     clr CANPLAY
     mov a, nextPlay
-    jnz a, not_hund
-    SAY(temperature+1#low)
-    not_hund:
-    cjne a, #1, one:
-    SAY(temperature+0#high)
-    one:
-    SAY(temperature+0#low)
+    cjne a, #0, NOTHUND
+    	SPEAK(low(temperature+1))
+    	mov nextPlay, #1
+    	ljmp end_audio
+    NOTHUND:
+    	cjne a, #1, ONES
+    	mov nextPlay, #2
+    	SPEAK(high(temperature+0))
+    	sjmp end_audio
+    ONES:
+    	mov nextPlay, #3
+    	SPEAK(low(temperature+0))
     end_audio:
 	    ; jb RI, serial_get
-	    jb P4.5, forever_loop ; Check if push-button pressed
+	    jb P4.5, end_all ; Check if push-button pressed
 	    jnb P4.5, $ ; Wait for push-button release
         clr a
         mov nextPlay, a
+	end_all:
 	ljmp forever_loop
 
 END
