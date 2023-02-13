@@ -390,39 +390,6 @@ Left_blank mac
 	Display_char(#' ')
 endmac
 
-Display_10_digit_BCD:
-	Set_Cursor(2, 7)
-	Display_BCD(bcd+4)
-	Display_BCD(bcd+3)
-	Display_BCD(bcd+2)
-	Display_BCD(bcd+1)
-	Display_BCD(bcd+0)
-	; Replace all the zeros to the left with blanks
-	Set_Cursor(2, 7)
-	Left_blank(bcd+4, skip_blank)
-	Left_blank(bcd+3, skip_blank)
-	Left_blank(bcd+2, skip_blank)
-	Left_blank(bcd+1, skip_blank)
-	mov a, bcd+0
-	anl a, #0f0h
-	swap a
-	jnz skip_blank
-	Display_char(#' ')
-    skip_blank:
-ret
-
-; We can display a number any way we want.  In this case with
-; four decimal places.
-Display_formated_BCD:
-	Set_Cursor(2, 7)
-	Display_char(#' ')
-	Display_BCD(bcd+3)
-	Display_BCD(bcd+2)
-	Display_char(#'.')
-	Display_BCD(bcd+1)
-	Display_BCD(bcd+0)
-ret
-
 ; Eight bit number to display passed in ’a’.
 ; Sends result to LCD
 SendToLCD:
@@ -440,8 +407,17 @@ SendToLCD:
 	lcall ?WriteData; Send to LCD
 ret
 
-loadbyte mac
+writeByte mac
 	mov a, %0
+	movx @dptr, a
+	inc dptr
+endmac
+
+write2Bytes mac
+	mov a, %0+1
+	movx @dptr, a
+	inc dptr
+    mov a, %0+0
 	movx @dptr, a
 	inc dptr
 endmac
@@ -452,12 +428,12 @@ Save_Configuration:
 	mov FCON, #0x08 ; Page Buffer Mapping Enabled (FPS = 1)
 	mov dptr, #0x7f80 ; Last page of flash memory
 	; Save variables
-	loadbyte(SoakTempBCD) ; @0x7f80
-	loadbyte(SoakTimeBCD) ; @0x7f81
-	loadbyte(ReflowTempBCD) ; @0x7f82
-	loadbyte(ReflowTimeBCD) ; @0x7f83
-	loadbyte(#0x55) ; First key value @0x7f84
-	loadbyte(#0xAA) ; Second key value @0x7f85
+	write2Bytes(SoakTempBCD) ; @0x7f80
+	write2Bytes(SoakTimeBCD) ; @0x7f82
+	write2Bytes(ReflowTempBCD) ; @0x7f84
+	write2Bytes(ReflowTimeBCD) ; @0x7f86
+	writeByte(#0x55) ; First key value @0x7f87
+	writeByte(#0xAA) ; Second key value @0x7f88
 	mov FCON, #0x00 ; Page Buffer Mapping Disabled (FPS = 0)
 	orl EECON, #0b01000000 ; Enable auto-erase on next write sequence
 	mov FCON, #0x50 ; Write trigger first byte
@@ -468,33 +444,46 @@ Save_Configuration:
     pop IE
 ret
 
-getbyte mac
+readByte mac
 	clr a
 	movc a, @a+dptr
 	mov %0, a
 	inc dptr
 Endmac
 
+read2Bytes mac
+	clr a
+	movc a, @a+dptr
+	mov %0+1, a
+	inc dptr
+    clr a
+	movc a, @a+dptr
+	mov %0+0, a
+	inc dptr
+Endmac
+
 Load_Configuration:
-	mov dptr, #0x7f84 ; First key value location.
-	getbyte(R0) ; 0x7f84 should contain 0x55
+	mov dptr, #0x7f87 ; First key value location.
+	readByte(R0) ; 0x7f84 should contain 0x55
 	cjne R0, #0x55, Load_Defaults
-	getbyte(R0) ; 0x7f85 should contain 0xAA
+	readByte(R0) ; 0x7f85 should contain 0xAA
 	cjne R0, #0xAA, Load_Defaults
 	; Keys are good.  Get stored values.
 	mov dptr, #0x7f80
-	getbyte(SoakTempBCD) ; 0x7f80
-	getbyte(SoakTimeBCD) ; 0x7f81
-	getbyte(ReflowTempBCD) ; 0x7f82
-	getbyte(ReflowTimeBCD) ; 0x7f83
+	read2Bytes(SoakTempBCD) ; 0x7f80
+	read2Bytes(SoakTimeBCD) ; 0x7f82
+	read2Bytes(ReflowTempBCD) ; 0x7f84
+	read2Bytes(ReflowTimeBCD) ; 0x7f86
 ret
-
-; Load defaults if 'keys' are incorrect
-Load_Defaults:
-	mov SoakTempBCD, #150
-	mov SoakTimeBCD, #45
-	mov ReflowTempBCD, #225
-	mov ReflowTimeBCD, #30
+    Load_Defaults: ; Load defaults if 'keys' are incorrect
+	    mov SoakTempBCD+1, #0x01
+	    mov SoakTempBCD+0, #0x50
+	    mov SoakTimeBCD+1, #0x00
+	    mov SoakTimeBCD+0, #0x45
+	    mov ReflowTempBCD+1, #0x02
+	    mov ReflowTempBCD+0, #0x25
+	    mov ReflowTimeBCD+1, #0x00
+	    mov ReflowTimeBCD+0, #0x30
 ret
 
 updateDisplay:
