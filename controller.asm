@@ -108,20 +108,20 @@ cseg
 ;                      		1234567890123456
 Start_display_1:   		db '   RIZZOVEN69   ', 0
 Start_display_2:   		db '  Press Start   ', 0
-Parameter_display_1:   	db ' Soak   Reflow  ', 0
-Parameter_display_2:   	db 'xxx xxx xxx xxx ', 0
+Parameter_display_1:   	db 'Soak   xxxC xxxs', 0
+Parameter_display_2:   	db 'Reflow xxxC xxxs', 0
 Ready_display_1:        db '     Ready      ', 0
 Ready_display_2:        db '  Press Start   ', 0
 R2Soak_display_1:       db '  Ramp to Soak  ', 0
-R2Soak_display_2:       db 'Tmp:xxx Time:xxx', 0
+R2Soak_display_2:       db '  xxxC    xxxs  ', 0
 Soak_display_1:         db '  Preheat/Soak  ', 0
-Soak_display_2:         db 'Tmp:xxx Time:xxx', 0
+Soak_display_2:         db '  xxxC    xxxs  ', 0
 R2Reflow_display_1:     db ' Ramp to Reflow ', 0
-R2Reflow_display_2:     db 'Tmp:xxx Time:xxx', 0
+R2Reflow_display_2:     db '  xxxC    xxxs  ', 0
 Reflow_display_1:       db '     Reflow     ', 0
-Reflow_display_2:       db 'Tmp:xxx Time:xxx', 0
+Reflow_display_2:       db '  xxxC    xxxs  ', 0
 Cooling_display_1:      db '  Cooling Down  ', 0
-Cooling_display_2:      db 'Tmp:xxx Time:xxx', 0
+Cooling_display_2:      db '  xxxC    xxxs  ', 0
 Done_display_1:         db ' Safe to Handle ', 0
 Done_display_2:         db '  Press Start   ', 0
 Cancelled_display_1:    db '   Cancelled    ', 0
@@ -616,15 +616,15 @@ updateDisplay:
     _clearUpdated:
         clr Updated
         ; Display Soak Temp
-        Set_Cursor(2,1)
+        Set_Cursor(1,8)
         LCDSend3BCD(SoakTempBCD)
         
         ; Display Soak Time
-        Set_Cursor(2,5)
+        Set_Cursor(1,13)
         LCDSend3BCD(SoakTimeBCD)
         
         ; Display Reflow Temp
-        Set_Cursor(2,9)
+        Set_Cursor(2,8)
         LCDSend3BCD(ReflowTempBCD)
         
         ; Display Reflow Time
@@ -718,20 +718,20 @@ adjustParameters:
     Send_Constant_String(#Parameter_display_1)
     Set_cursor(2, 1)
     Send_Constant_String(#Parameter_display_2)
-    Set_Cursor(2, 4)
-    WriteData(#0x00)
-    Set_Cursor(2, 8)
-    WriteData(#'s')
-    Set_Cursor(2, 12)
-    WriteData(#0x00)
-    Set_Cursor(2, 16)
-    WriteData(#'s')
-    WriteCommand(#0x0e) ; show cursor, no blink
+    Set_Cursor(1, 11)
+    ;WriteData(#0x00)
+    ;Set_Cursor(1, 16)
+    ;WriteData(#'s')
+    ;Set_Cursor(2, 11)
+    ;WriteData(#0x00)
+    ;Set_Cursor(2, 16)
+    ;WriteData(#'s')
+    ;WriteCommand(#0x0e) ; show cursor, no blink
 	; ----------------------------------------------;
 	; ------------- Soak Temperature ---------------;
 	; ----------------------------------------------;
     adjustSoakTemp100:
-        Set_Cursor(2,1)
+        Set_Cursor(2,8)
         ifPressedJumpTo(LEFT, start, 1)
         ifPressedJumpTo(RIGHT, adjustSoakTemp010, 1)
         ifNotPressedJumpTo(UP, _adjustSoakTemp100a)
@@ -759,7 +759,7 @@ adjustParameters:
     ljmp adjustSoakTemp100 
     
     adjustSoakTemp010:
-        Set_Cursor(2,2)
+        Set_Cursor(1,9)
         ifPressedJumpTo(LEFT, adjustSoakTemp100, 1)
         ifPressedJumpTo(RIGHT, adjustSoakTemp001, 1)
         ifNotPressedJumpTo(UP, _adjustSoakTemp010a)
@@ -785,7 +785,7 @@ adjustParameters:
     ljmp adjustSoakTemp010 
     
     adjustSoakTemp001:
-        Set_Cursor(2,3)
+        Set_Cursor(1,10)
         ifPressedJumpTo(LEFT, adjustSoakTemp010, 1)
         ifPressedJumpTo(RIGHT, adjustSoakTime100, 1)
         ifNotPressedJumpTo(UP, _adjustSoakTemp001a)
@@ -822,7 +822,7 @@ adjustParameters:
 	; ---------------- Soak Time -------------------;
 	; ----------------------------------------------;
     adjustSoakTime100:
-        Set_Cursor(2,5)
+        Set_Cursor(1,13)
         ifPressedJumpTo(LEFT, adjustSoakTemp001, 1)
         ifPressedJumpTo(RIGHT, adjustSoakTime010, 1)
         ifNotPressedJumpTo(UP, _adjustSoakTime100a)
@@ -850,7 +850,7 @@ adjustParameters:
     ljmp adjustSoakTime100 
     
     adjustSoakTime010:
-        Set_Cursor(2,6)
+        Set_Cursor(1,14)
         ifPressedJumpTo(LEFT, adjustSoakTime100, 1)
         ifPressedJumpTo(RIGHT, adjustSoakTime001, 1)
         ifNotPressedJumpTo(UP, _adjustSoakTime010a)
@@ -876,7 +876,7 @@ adjustParameters:
     ljmp adjustSoakTime010 
     
     adjustSoakTime001:
-        Set_Cursor(2,7)
+        Set_Cursor(1,15)
         ifPressedJumpTo(LEFT, adjustSoakTime010, 1)
         ifPressedJumpTo(RIGHT, adjustReflowTemp100, 1)
         ifNotPressedJumpTo(UP, _adjustSoakTime001a)
@@ -913,7 +913,7 @@ adjustParameters:
 	; ------------ Reflow Temperature --------------;
 	; ----------------------------------------------;
     adjustReflowTemp100:
-        Set_Cursor(2,9)
+        Set_Cursor(2,8)
         ifPressedJumpTo(LEFT, adjustSoakTime001, 1)
         ifPressedJumpTo(RIGHT, adjustReflowTemp010, 1)
         ifNotPressedJumpTo(UP, _adjustReflowTemp100a)
@@ -941,7 +941,7 @@ adjustParameters:
     ljmp adjustReflowTemp100 
     
     adjustReflowTemp010:
-        Set_Cursor(2,10)
+        Set_Cursor(2,9)
         ifPressedJumpTo(LEFT, adjustReflowTemp100, 1)
         ifPressedJumpTo(RIGHT, adjustReflowTemp001, 1)
         ifNotPressedJumpTo(UP, _adjustReflowTemp010a)
@@ -967,7 +967,7 @@ adjustParameters:
     ljmp adjustReflowTemp010 
     
     adjustReflowTemp001:
-        Set_Cursor(2,11)
+        Set_Cursor(2,10)
         ifPressedJumpTo(LEFT, adjustReflowTemp010, 1)
         ifPressedJumpTo(RIGHT, adjustReflowTime100, 1)
         ifNotPressedJumpTo(UP, _adjustReflowTemp001a)
