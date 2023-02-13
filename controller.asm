@@ -30,14 +30,14 @@ BRG_VAL       equ (0x100-(CLK/(16*BAUDRATE)))
 PWM_PERIOD equ 200
 
 ; io pins
-LEFT      equ P2.0
+LEFT      equ P2.7
 ; RIGHT     equ P2.3
-RIGHT     equ P4.5 ; boot button for debugging
-UP        equ P2.6
-DOWN      equ P2.6
-STARTSTOP equ P2.6
+RIGHT     equ P2.6 ; boot button for debugging
+UP        equ P2.1
+DOWN      equ P2.5
+STARTSTOP equ P4.5
 SPEAKER_E equ P2.4
-OVEN      equ P2.7
+OVEN      equ P3.7
 
 ; LCD pin mapping
 LCD_D7 equ P1.0
@@ -238,7 +238,6 @@ Timer2_Init:
     zero2Bytes(Counter1000ms)
     mov Counter100ms, #0x00
     mov CounterPWM, #0x00
-    mov PWMDutyCycle, #0x00
 	; Enable the timer and interrupts
     setb ET2  ; Enable timer 2 interrupt
     setb TR2  ; Enable timer 2
@@ -655,6 +654,8 @@ reset:
     setb STARTSTOP
     setb SPEAKER_E
     setb OVEN
+
+    mov PWMDutyCycle, #0x00
     
     setb EA   ; Enable Global interrupts
     setb Updated ; update the display on reset
@@ -727,6 +728,9 @@ adjustParameters:
     Set_Cursor(2, 16)
     WriteData(#'s')
     WriteCommand(#0x0e) ; show cursor, no blink
+
+    setb Updated
+
 	; ----------------------------------------------;
 	; ------------- Soak Temperature ---------------;
 	; ----------------------------------------------;
@@ -1139,6 +1143,7 @@ ready:
     mov ReflowTimeHex+1, x+1
 
     readyLoop:
+        ifPressedJumpTo(LEFT, adjustParameters, 1)
         ifPressedJumpTo(STARTSTOP, RampToSoak, 1)
     ljmp readyLoop
 
