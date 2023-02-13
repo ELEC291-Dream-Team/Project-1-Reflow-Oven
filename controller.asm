@@ -31,8 +31,7 @@ PWM_PERIOD equ 200
 
 ; io pins
 LEFT      equ P2.7
-; RIGHT     equ P2.3
-RIGHT     equ P2.6 ; boot button for debugging
+RIGHT     equ P2.6
 UP        equ P2.1
 DOWN      equ P2.5
 STARTSTOP equ P4.5
