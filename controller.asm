@@ -586,7 +586,7 @@ read2Bytes mac
 Endmac
 
 Load_Configuration:
-	mov dptr, #0x7f87 ; First key value location.
+	mov dptr, #0x7f88 ; First key value location.
 	readByte(R0) ; 0x7f84 should contain 0x55
 	cjne R0, #0x55, Load_Defaults
 	readByte(R0) ; 0x7f85 should contain 0xAA
@@ -730,12 +730,12 @@ adjustParameters:
     WriteCommand(#0x0e) ; show cursor, no blink
 
     setb Updated
-    
+
 	; ----------------------------------------------;
 	; ------------- Soak Temperature ---------------;
 	; ----------------------------------------------;
     adjustSoakTemp100:
-        Set_Cursor(2,8)
+        Set_Cursor(1,8)
         ifPressedJumpTo(LEFT, start, 1)
         ifPressedJumpTo(RIGHT, adjustSoakTemp010, 1)
         ifNotPressedJumpTo(UP, _adjustSoakTemp100a)
@@ -1061,6 +1061,40 @@ adjustParameters:
         
     ljmp adjustReflowTime010 
     
+adjustParametersEnd:
+    clr TR1 ; Stop Timer 1 ISR from playing previous request
+	clr SPEAKER_E ; Turn off speaker.
+
+    ; set starting address
+	mov FlashReadAddr+2, #0x00
+	mov FlashReadAddr+1, #0x00
+	mov FlashReadAddr+0, #0x00
+
+	; How many bytes to play? All of them!  Asume 4Mbytes memory: 0x3fffff
+	mov w+2, #0x00
+	mov w+1, #0x56
+	mov w+0, #0x22
+
+	setb SPEAKER_E ; Turn on speaker.
+	setb TR1 ; Start playback by enabling Timer 1
+    ; update display
+    ; show cursor
+    Set_Cursor(1, 1)
+    Send_Constant_String(#Parameter_display_1)
+    Set_cursor(2, 1)
+    Send_Constant_String(#Parameter_display_2)
+    Set_Cursor(1, 11)
+    ; WriteData(#0x00)
+    ; Set_Cursor(2, 8)
+    ; WriteData(#'s')
+    ; Set_Cursor(2, 12)
+    ; WriteData(#0x00)
+    ; Set_Cursor(2, 16)
+    ; WriteData(#'s')
+    WriteCommand(#0x0e) ; show cursor, no blink
+
+    setb Updated
+
     adjustReflowTime001:
         Set_Cursor(2,15)
         ifPressedJumpTo(LEFT, adjustReflowTime010, 1)
@@ -1143,7 +1177,7 @@ ready:
     mov ReflowTimeHex+1, x+1
 
     readyLoop:
-        ifPressedJumpTo(LEFT, adjustParameters, 1)
+        ifPressedJumpTo(LEFT, adjustParametersEnd, 1)
         ifPressedJumpTo(STARTSTOP, RampToSoak, 1)
     ljmp readyLoop
 
@@ -1242,6 +1276,7 @@ Cancelled:
     WriteCommand(#0x0c) ; hide cursor, no blink
     setb waitflag
     mov waitCount, #15
+    zero2Bytes(Counter1000ms)
     CancelledLoop:
         ifPressedJumpTo(STARTSTOP, start, 2) ; Return to the menu if start button pressed
         mov a, waitCount
