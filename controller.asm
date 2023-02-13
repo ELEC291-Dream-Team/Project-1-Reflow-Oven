@@ -31,8 +31,8 @@ PWM_PERIOD equ 200
 
 ; io pins
 LEFT      equ P2.0
-RIGHT     equ P2.3
-; RIGHT     equ P4.5 ; boot button for debugging
+; RIGHT     equ P2.3
+RIGHT     equ P4.5 ; boot button for debugging
 UP        equ P2.6
 DOWN      equ P2.6
 STARTSTOP equ P2.6
@@ -91,8 +91,10 @@ dseg at 0x30
     w:             ds 3
     FlashReadAddr: ds 3
 ; temp variables
-    ColdTemp: ds 4
-    HotTemp:  ds 4
+    ColdTemp:    ds 2
+    HotTemp:     ds 2
+    OvenTemp:    ds 2
+    OvenTempBCD: ds 2
 ; PWM variables
     PWMDutyCycle: ds 1
     PWMCompare:   ds 1
@@ -106,7 +108,7 @@ cseg
 ;                      		1234567890123456
 Start_display_1:   		db '   RIZZOVEN69   ', 0
 Start_display_2:   		db '  Press Start   ', 0
-Parameter_display_1:   	db 'ST  St  RT  Rt  ', 0
+Parameter_display_1:   	db ' Soak   Reflow  ', 0
 Parameter_display_2:   	db 'xxx xxx xxx xxx ', 0
 Ready_display_1:        db '     Ready      ', 0
 Ready_display_2:        db '  Press Start   ', 0
@@ -159,6 +161,7 @@ Timer1_Init:
 ret
 
 Timer1_ISR:
+    clr EA
 	; The registers used in the ISR must be saved in the stack
 	push acc
 	push psw
@@ -221,6 +224,7 @@ Timer1_ISR:
     Timer1_ISR_Done:	
 	pop psw
 	pop acc
+    setb EA
 reti
 
 Timer2_Init:
@@ -242,6 +246,7 @@ ret
 
 Timer2_ISR:
 	clr TF2  ; Timer 2 doesn't clear TF2 automatically. Do it in ISR
+    clr EA
 	; cpl P1.1 ; To check the interrupt rate with oscilloscope. It must be precisely a 1 ms pulse.
 
 	; The two registers used in the ISR must be saved in the stack
@@ -265,9 +270,7 @@ Timer2_ISR:
 	cjne a, #low(1000), Counter1000msnotOverflow 
 	mov a, Counter1000ms+1
 	cjne a, #high(1000), Counter1000msnotOverflow
-	    clr a
-	    mov Counter1000ms+0, a
-	    mov Counter1000ms+1, a
+        zero2Bytes(Counter1000ms)
         jnb waitflag, Counter1000msnotOverflow
         inc waitCount
     Counter1000msnotOverflow:
@@ -275,14 +278,13 @@ Timer2_ISR:
     ; if Counter100ms overflows
     mov a, Counter100ms
 	cjne a, #100, Counter100msnotOverflow 
-	    clr a
-	    mov Counter100ms, a
+	    mov Counter100ms, #0x00
+        lcall ReadTemp
     Counter100msnotOverflow:
 
     mov a, CounterPWM
 	cjne a, #PWM_PERIOD, CounterPWMnotOverflow 
-	    clr a
-	    mov CounterPWM, a
+	    mov CounterPWM, #0x00
         setb OVEN
         mov PWMCompare, PWMDutyCycle
     CounterPWMnotOverflow:
@@ -293,11 +295,13 @@ Timer2_ISR:
 
     pop psw
 	pop acc
+    setb EA
 reti
 
 readADCChannel mac ; stores ADC in x
     Load_x(0)
 
+    push IE
     clr EA
     clr CS_ADC ; Enable device (active low)
 
@@ -313,7 +317,7 @@ readADCChannel mac ; stores ADC in x
     mov x+0, a
 
     setb CS_ADC
-    setb EA
+    pop IE
 endmac
 
 readVoltageChannel mac ; stores the voltage in x in mV
@@ -326,7 +330,7 @@ readVoltageChannel mac ; stores the voltage in x in mV
     lcall div32
 endmac
 
-ReadTemp: ; stores temp in x in hex
+ReadTemp:
     readVoltageChannel(1)
     Load_y(297)
     lcall mul32
@@ -334,8 +338,6 @@ ReadTemp: ; stores temp in x in hex
     lcall div32
     Load_y(273)
     lcall sub32
-    mov ColdTemp+3, x+3
-    mov ColdTemp+2, x+2
     mov ColdTemp+1, x+1
     mov ColdTemp+0, x+0
     
@@ -344,18 +346,21 @@ ReadTemp: ; stores temp in x in hex
     lcall mul32
     Load_y(12341)
     lcall div32
-    mov HotTemp+3, x+3
-    mov HotTemp+2, x+2
     mov HotTemp+1, x+1
     mov HotTemp+0, x+0
     
-    mov y+3, ColdTemp+3
-    mov y+2, ColdTemp+2
+    mov y+3, #0x00
+    mov y+2, #0x00
     mov y+1, ColdTemp+1
     mov y+0, ColdTemp+0
     lcall add32
 
+    mov OvenTemp+1, x+1
+    mov OvenTemp+0, x+0
+
     lcall hex2bcd
+    mov OvenTempBCD+1, bcd+1
+    mov OvenTempBCD+0, bcd+0
 ret
 
 Send_SPI:
@@ -409,17 +414,37 @@ SerialPutChar:
     mov SBUF, a
 ret
 
-SerialSend3BCD:
-    mov a, bcd+1
+; SerialSend3BCD:
+;     mov a, bcd+1
+;     anl a, #0x0f
+;     orl a, #0x30
+;     lcall SerialPutChar
+;     mov a, bcd+0
+;     swap a
+;     anl a, #0x0f
+;     orl a, #0x30
+;     lcall SerialPutChar
+;     mov a, bcd+0
+;     anl a, #0x0f
+;     orl a, #0x30
+;     lcall SerialPutChar
+;     mov a, #'\r'
+;     lcall SerialPutChar
+;     mov a, #'\n'
+;     lcall SerialPutChar
+; ret
+
+SerialSend3BCD mac
+    mov a, %0+1
     anl a, #0x0f
     orl a, #0x30
     lcall SerialPutChar
-    mov a, bcd+0
+    mov a, %0+0
     swap a
     anl a, #0x0f
     orl a, #0x30
     lcall SerialPutChar
-    mov a, bcd+0
+    mov a, %0+0
     anl a, #0x0f
     orl a, #0x30
     lcall SerialPutChar
@@ -427,7 +452,7 @@ SerialSend3BCD:
     lcall SerialPutChar
     mov a, #'\n'
     lcall SerialPutChar
-ret
+endmac
 
 SerialSendString:
     clr A
@@ -505,23 +530,6 @@ Left_blank mac
     Left_blank_%M_b:
 	Display_char(#' ')
 endmac
-
-; Eight bit number to display passed in ’a’.
-; Sends result to LCD
-SendToLCD:
-	mov b, #100
-	div ab
-	orl a, #0x30 ; Convert hundreds to ASCII
-	lcall ?WriteData ; Send to LCD
-	mov a, b    ; Remainder is in register b
-	mov b, #10
-	div ab
-	orl a, #0x30 ; Convert tens to ASCII
-	lcall ?WriteData; Send to LCD
-	mov a, b
-	orl a, #0x30 ; Convert units to ASCII
-	lcall ?WriteData; Send to LCD
-ret
 
 writeByte mac
 	mov a, %0
@@ -663,13 +671,24 @@ reset:
     lcall Load_Configuration ; Update parameters with flash memory
     lcall InitSerialPort
 
+    ; custom degree C character
+    WriteCommand(#0x40)
+    WriteData(#0x18)
+    WriteData(#0x18)
+    WriteData(#0x03)
+    WriteData(#0x04)
+    WriteData(#0x04)
+    WriteData(#0x04)
+    WriteData(#0x03)
+    WriteData(#0x00)
+
 start:
     ; display start message
+    WriteCommand(#0x0c) ; hide cursor, no blink
     Set_Cursor(1, 1)
     Send_Constant_String(#Start_display_1)
     Set_cursor(2, 1)
     Send_Constant_String(#Start_display_2)
-    WriteCommand(#0x0c) ; hide cursor, no blink
 
     startLoop:
         ifPressedJumpTo(STARTSTOP, adjustParameters, 1)
@@ -678,14 +697,36 @@ start:
 ; end of start state
 
 adjustParameters:
+        clr TR1 ; Stop Timer 1 ISR from playing previous request
+	    clr SPEAKER_E ; Turn off speaker.
+    
+        ; set starting address
+	    mov FlashReadAddr+2, #0x00
+	    mov FlashReadAddr+1, #0x00
+	    mov FlashReadAddr+0, #0x00
+    
+	    ; How many bytes to play? All of them!  Asume 4Mbytes memory: 0x3fffff
+	    mov w+2, #0x00
+	    mov w+1, #0x56
+	    mov w+0, #0x22
+    
+	    setb SPEAKER_E ; Turn on speaker.
+	    setb TR1 ; Start playback by enabling Timer 1
     ; update display
     ; show cursor
     Set_Cursor(1, 1)
     Send_Constant_String(#Parameter_display_1)
     Set_cursor(2, 1)
     Send_Constant_String(#Parameter_display_2)
+    Set_Cursor(2, 4)
+    WriteData(#0x00)
+    Set_Cursor(2, 8)
+    WriteData(#'s')
+    Set_Cursor(2, 12)
+    WriteData(#0x00)
+    Set_Cursor(2, 16)
+    WriteData(#'s')
     WriteCommand(#0x0e) ; show cursor, no blink
-
 	; ----------------------------------------------;
 	; ------------- Soak Temperature ---------------;
 	; ----------------------------------------------;
@@ -1181,7 +1222,7 @@ Done:
     mov waitCount, #0x00
     DoneLoop:
         ifPressedJumpTo(STARTSTOP, start, 1) ; Return to the menu if start button pressed
-        cjne waitCount, #30, DoneLoop ; wait 30 sec
+        ; cjne waitCount, #30, DoneLoop ; wait 30 sec
         clr waitflag
         ljmp start
 
@@ -1195,7 +1236,7 @@ Cancelled:
     mov waitCount, #0x00
     CancelledLoop:
         ifPressedJumpTo(STARTSTOP, start, 2) ; Return to the menu if start button pressed
-        cjne waitCount, #0x30, CancelledLoop ; wait 30 sec
+        ; cjne waitCount, #0x30, CancelledLoop ; wait 30 sec
         clr waitflag
         ljmp start
 END
