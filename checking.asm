@@ -86,11 +86,13 @@ bseg
 
 	
 cseg
+
 SAY3BCD MAC
 	say_numb(#Low(BCD+1))
 	say_numb(#High(BCD))
 	say_numb(#Low(BCD))
 	ENDMAC
+
 SAY MAC
 	clr a
 	Load_x(%0)
@@ -115,7 +117,7 @@ SAY MAC
 	    mov a, #0x00 ; Request first byte to send to DAC
 	    lcall Send_SPI
     
-	    ; How many bytes to play? All of them!  Asume 4Mbytes memory: 0x3fffff
+	    ; How many bytes to play?
 	    mov w+2, #0x00
 	    mov w+1, #0x2b
 	    mov w+0, #0x11
