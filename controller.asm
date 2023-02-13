@@ -28,6 +28,7 @@ BAUDRATE      equ 115200
 BRG_VAL       equ (0x100-(CLK/(16*BAUDRATE)))
 
 PWM_PERIOD equ 200
+PID_PERIOD equ 500
 
 ; io pins
 LEFT      equ P2.7
@@ -76,6 +77,7 @@ dseg at 0x30
     Counter1000ms: ds 2
     Counter100ms:  ds 1
     CounterPWM:    ds 1
+    CounterPID:    ds 2
     waitCount:     ds 1
 ; parameter variables
     SoakTempBCD:   ds 2
@@ -94,14 +96,16 @@ dseg at 0x30
     HotTemp:     ds 2
     OvenTemp:    ds 2
     OvenTempBCD: ds 2
+    TargetTemp:  ds 2
 ; PWM variables
     PWMDutyCycle: ds 1
     PWMCompare:   ds 1
 
 bseg
-mf:         dbit 1 ; math32 bit variable
-Updated:    dbit 1 ; updated display flag
-waitflag:   dbit 1 ; wait 30 sec flag
+mf:                 dbit 1 ; math32 bit variable
+Updated:            dbit 1 ; updated display flag
+waitflag:           dbit 1 ; wait 30 sec flag
+MaintainTargetTemp: dbit 1
 
 cseg
 ;                      		1234567890123456
@@ -272,6 +276,15 @@ Timer2_ISR:
         jnb waitflag, Counter1000msnotOverflow
         dec waitCount
     Counter1000msnotOverflow:
+
+    mov a, CounterPID+0
+	cjne a, #low(PID_PERIOD), CounterPIDnotOverflow 
+	mov a, CounterPID+1
+	cjne a, #high(PID_PERIOD), CounterPIDnotOverflow
+        zero2Bytes(CounterPID)
+        jnb MaintainTargetTemp, CounterPIDnotOverflow
+            ; do calculation: OvenTemp -> PWMDutyCycle
+    CounterPIDnotOverflow:
 
     ; if Counter100ms overflows
     mov a, Counter100ms
