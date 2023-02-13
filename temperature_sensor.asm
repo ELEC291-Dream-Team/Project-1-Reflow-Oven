@@ -25,6 +25,7 @@ DSEG at 40H
 x: ds 4
 y: ds 4
 bcd: ds 5
+wireTemp: ds 5
  
  
 CSEG 
@@ -57,6 +58,7 @@ endmac
 BOOT_BUTTON   equ P4.5
 
 temperature: db 'TempLCM:', 0
+wire: db 'TempWIRE:', 0
 
 INIT_SPI: 
     setb MY_MISO    ; Make MISO an input pin 
@@ -159,7 +161,7 @@ Convert:
 	lcall sub32
 	; The 4-bytes of x have the temperature in binary
 	lcall hex2bcd ; converts binary in x to BCD in BCD
-	lcall Display_10_digit_BCD
+	ret ; return control
 	
 ; Sends 10-digit BCD number in bcd to the LCD
 Display_10_digit_BCD:
@@ -220,10 +222,14 @@ MainProgram:
 	mov a, #'\n'
 	lcall putchar
 	mov r7, #0
+
+	; Sends constant string to board
 	lcall LCD_4BIT
 	Set_Cursor(1,1)
     Send_Constant_String(#temperature)
-    
+    Set_Cursor(2,1)
+	Send_Constant_String(#wire)
+
 loop:
 	jb BOOT_BUTTON, loop_temp_button  
 	Wait_Milli_Seconds(#50)	
