@@ -106,7 +106,46 @@ BSEG
 ; Interrupt vectors:
 cseg
 
-readVoltageChannel mac ; stores the voltage in x in mV
+;-----------------;
+; Params: Takes the channel to be read
+; Output: The moving average of 100 samples, result is stored in X 
+; (so not to conflict with previous code)
+;-----------------;
+readVoltageChannel MAC
+	mov r3, #%0 ; move into a register not used in program
+	lcall _Average_CH
+ENDMAC
+
+; Code adapted from prof code from
+; Lab 1 lecture slides two
+Wait10us:
+	mov r0, #74
+	djnz r0, $
+	ret
+_Average_CH:
+	mov r4, #0 ; stores sum
+	mov r5, #100
+Sum_Loop0:
+	lcall _readVoltageChannel ; x is voltage in mV
+	mov y+3, #0
+	mov y+2, #0
+	mov y+1, x+1 ; change this to corrosponding register
+	mov y+0, x+0
+
+    ; X takes previous value of sum
+    mov x+3, #0
+	mov x+2, #0
+	mov x+1, r4+1 ; Hopefully you can do this with a register!
+	mov x+0, r4+0
+
+	lcall add32 ; sum + x_new
+	lcall Wait10us
+	djnz r5, Sum_Loop0 ; run for 100 times
+	load_Y(100)
+	lcall div32 ; divide by 100 to get average 
+	ret
+
+_readVoltageChannel: ; stores the voltage in x in mV
     Load_x(0)
 
     clr EA
@@ -114,7 +153,7 @@ readVoltageChannel mac ; stores the voltage in x in mV
 
     mov a, #0x01
     lcall Send_SPI
-    mov a, #%0
+    mov a, r3 ; pass parameter 
     swap a
     orl a, #0x80
     lcall Send_SPI
@@ -132,7 +171,7 @@ readVoltageChannel mac ; stores the voltage in x in mV
     lcall add32
     Load_y(10)
     lcall div32
-endmac
+    ret
 
 ReadTemp: ; stores temp in x in hex
     readVoltageChannel(1)
