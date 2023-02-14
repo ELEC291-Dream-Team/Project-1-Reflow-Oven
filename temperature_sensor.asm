@@ -124,6 +124,27 @@ Read_ADC_Channel MAC
 	lcall _Read_ADC_Channel
 ENDMAC
 
+; Code adapted from prof code
+Wait10us:
+	mov r0, #74
+	djnz r0, $
+	ret
+Average_CH0:
+	Load_x(0)
+	mov r5, #100
+Sum_Loop0:
+	Read_ADC_Channel(1)
+	mov y+3, #0
+	mov y+2, #0
+	mov y+1, r7
+	mov y+0, r6
+	lcall add32
+	lcall Wait10us
+	djnz r5, Sum_Loop0
+	load_Y(100)
+	lcall div32
+	ret
+
 _Read_ADC_Channel:
 	clr CE_ADC
 	mov R0, #00000001B
@@ -148,7 +169,7 @@ Convert:
 	; Copy the 10-bits of the ADC conversion into the 32-bits of 'x'
 	mov x+0, r6
 	mov x+1, r7 
-	mov x+2, #0
+	mov x+2, #0 ; padding the front two bytes by zero
 	mov x+3, #0
 	; Multiply by 410
 	load_Y(410)
@@ -215,7 +236,7 @@ endmac
 MainProgram:
     mov SP, #7FH ; Set the stack pointer to the begining of idata
     lcall InitSerialPort
-	Read_ADC_Channel(1)
+	lcall Average_CH0
 	Send_BCD(bcd)
 	mov a, #'\r'
 	lcall putchar
