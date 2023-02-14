@@ -1,6 +1,6 @@
 org 0x0000
-    ; ljmp reset ; Reset vector
-    ljmp debug
+    ljmp reset ; Reset vector
+    ; ljmp debug
 org 0x0003 ; External interrupt 0 vector (not used in this code)
 	reti
 org 0x000B ; Timer/Counter 0 overflow interrupt vector
@@ -103,11 +103,12 @@ dseg at 0x30
     w:             ds 3
     FlashReadAddr: ds 3
 ; temp variables
-    ColdTemp:      ds 2
-    HotTemp:       ds 2
-    OvenTemp:      ds 2
-    OvenTempBCD:   ds 2
-    TargetTemp:    ds 2
+    ColdTemp:          ds 2
+    HotTemp:           ds 2
+    OvenTemp:          ds 2
+    OvenTempBCD:       ds 2
+    TargetTemp:        ds 2
+    TempToBePlayedBCD: ds 2
 ; PWM variables
     PWMDutyCycle:  ds 1
     PWMCompare:    ds 1
@@ -709,15 +710,18 @@ updateDisplayParameters:
 ret
 
 updateDisplayReflow:
-    Set_Cursor(2,3)
-    LCDSend3BCD(OvenTempBCD)
-    Set_Cursor(2,11)
-    LCDSend3BCD(RunTimeBCD)
+    jnb Flag100ms, updateDisplayReflowDone
+        clr Flag100ms
+        Set_Cursor(2,3)
+        LCDSend3BCD(OvenTempBCD)
+        Set_Cursor(2,11)
+        LCDSend3BCD(RunTimeBCD)
 
-    ; Set_Cursor(1,1)
-    ; LCDSend3BCD(PWMDutyCycle)
-    ; LCDSend3BCD(TargetTemp)
-    ; LCDSend3BCD(OvenTemp)
+        ; Set_Cursor(1,1)
+        ; LCDSend3BCD(PWMDutyCycle)
+        ; LCDSend3BCD(TargetTemp)
+        ; LCDSend3BCD(OvenTemp)
+    updateDisplayReflowDone:
 ret
 
 setup:
@@ -910,6 +914,7 @@ soundHandler:
         setb ToBePlayed1s
         setb ToBePlayedDegreeC
         setb SoundIsPlaying
+        mov2Bytes(TempToBePlayedBCD, OvenTempBCD)
     noFiveSecond:
     jb SoundIsPlaying, psL1 ; if SoundIsPlaying
         ret
@@ -919,14 +924,16 @@ soundHandler:
         psL2:
         jnb ToBePlayed100s, L100sPlayed
             clr ToBePlayed100s
-            mov a, OvenTempBCD+1
+            mov a, TempToBePlayedBCD+1
             anl a, #0x0f
-            lcall playSound
+            jz N100sIsZero
+                lcall playSound
+            N100sIsZero:
             ret
         L100sPlayed:
         jnb ToBePlayed10s, L10sPlayed
             clr ToBePlayed10s
-            mov a, OvenTempBCD+0
+            mov a, TempToBePlayedBCD+0
             swap a
             anl a, #0x0f
             lcall playSound
@@ -934,7 +941,7 @@ soundHandler:
         L10sPlayed:
         jnb ToBePlayed1s, L1sPlayed
             clr ToBePlayed1s
-            mov a, OvenTempBCD+0
+            mov a, TempToBePlayedBCD+0
             anl a, #0x0f
             lcall playSound
             ret
@@ -1431,10 +1438,12 @@ RampToSoak:
     clr MaintainTargetTemp
     clr WaitFlag
     mov PWMDutyCycle, #PWM_PERIOD
+    setb Flag100ms
 
     RampToSoakLoop:
         ifPressedJumpTo(STARTSTOP, Cancelled, 1) ; Cancel if stop button pressed
         
+        lcall ReadTemp
         lcall updateDisplayReflow
 
         clr EA
@@ -1468,10 +1477,12 @@ Soak:
     zero2Bytes(Counter1000ms)
     setb WaitFlag
     mov PWMDutyCycle, #0x00
+    setb Flag100ms
 
     SoakLoop:
         ifPressedJumpTo(STARTSTOP, Cancelled, 2) ; Cancel if stop button pressed
 
+        lcall ReadTemp
         lcall updateDisplayReflow
 
         mov a, WaitCountBCD+1
@@ -1497,10 +1508,12 @@ RampToReflow:
     clr MaintainTargetTemp
     clr WaitFlag
     mov PWMDutyCycle, #PWM_PERIOD
+    setb Flag100ms
 
     RampToReflowLoop:
         ifPressedJumpTo(STARTSTOP, Cancelled, 3) ; Cancel if stop button pressed
 
+        lcall ReadTemp
         lcall updateDisplayReflow
 
         clr EA
@@ -1534,10 +1547,12 @@ Reflow:
     zero2Bytes(Counter1000ms)
     setb WaitFlag
     mov PWMDutyCycle, #0x00
+    setb Flag100ms
 
     ReflowLoop:
         ifPressedJumpTo(STARTSTOP, Cancelled, 4) ; Cancel if stop button pressed
 
+        lcall ReadTemp
         lcall updateDisplayReflow
 
         mov a, WaitCountBCD+1
@@ -1560,10 +1575,11 @@ Cooling:
 
     ; turn off oven
     clr MaintainTargetTemp
-    clr RunTimeFlag
     mov PWMDutyCycle, #0x00
+    setb Flag100ms
 
     CoolingLoop:
+        lcall ReadTemp
         lcall updateDisplayReflow
 
         clr EA
