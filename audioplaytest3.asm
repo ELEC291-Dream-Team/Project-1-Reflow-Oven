@@ -96,7 +96,7 @@ dseg at 30H
     x:   ds 4
     y:   ds 4
     bcd: ds 5
-	w:   ds 3 ; 24-bit play counter.  Decremented in Timer 1 ISR.
+	w:   ds 3 ; 24-bit SoundIsPlaying counter.  Decremented in Timer 1 ISR.
     FlashReadAddr: ds 3
     ; temp variables
 ColdTemp: ds 4
@@ -104,13 +104,13 @@ HotTemp: ds 4
 
 BSEG
     mf: dbit 1
-    play: dbit 1
-    5s_flag: dbit 1
-    100s_flag: dbit 1
-    10s_flag: dbit 1
-    1s_flag: dbit 1
-    degrees: dbit 1
-    is_playing: dbit 1
+    SoundIsPlaying: dbit 1
+    FiveSecondsFlag: dbit 1
+    ToBePlayed100s: dbit 1
+    ToBePlayed10s: dbit 1
+    ToBePlayed1s: dbit 1
+    ToBePlayedDegreeC: dbit 1
+    SpeakerIsBusy: dbit 1
 
 ; Interrupt vectors:
 cseg
@@ -205,7 +205,7 @@ Timer1_ISR:
 	    clr SPEAKER ; Turn off speaker.  Removes hissing noise when not playing sound.
 	    mov DADH, #0x80 ; middle of range
 	    orl DADC, #0b_0100_0000 ; Start DAC by setting GO/BSY=1
-        clr is_playing
+        clr SpeakerIsBusy
 
     Timer1_ISR_Done:	
 	pop psw
@@ -284,7 +284,7 @@ Init_all:
 
 	; Enable the timer and interrupts
     setb ET1  ; Enable timer 1 interrupt
-	; setb TR1 ; Timer 1 is only enabled to play stored sound
+	; setb TR1 ; Timer 1 is only enabled to SoundIsPlaying stored sound
 
 	; Configure the DAC.  The DAC output we are using is P2.3, but P2.2 is also reserved.
 	mov DADI, #0b_1010_0000 ; ACON=1
@@ -358,49 +358,49 @@ reset:
         Wait_Milli_Seconds(#5)
         jb 5s_BTN, audio_func
         jnb 5s_BTN, $
-        setb 5s_flag
+        setb FiveSecondsFlag
 
     audio_func:
 
         ;check whether 5s flag has been set
-        jnb 5s_flag, check_play_status
-        setb play
-        setb 100s_flag
-        setb 10s_flag
-        setb 1s_flag
-        setb degrees
-        clr 5s_flag
+        jnb FiveSecondsFlag, check_play_status
+        setb SoundIsPlaying
+        setb ToBePlayed100s
+        setb ToBePlayed10s
+        setb ToBePlayed1s
+        setb ToBePlayedDegreeC
+        clr FiveSecondsFlag
 
     check_play_status:
 
-        jnb play, end_of_audio_func
+        jnb SoundIsPlaying, end_of_audio_func
 
         check_is_playing:
-            jb is_playing, end_of_audio_func
+            jb SpeakerIsBusy, end_of_audio_func
 
-            check_100s_flag:
-                jnb 100s_flag, check_10s_flag
-                clr 100s_flag
+            check_ToBePlayed100s:
+                jnb ToBePlayed100s, check_ToBePlayed10s
+                clr ToBePlayed100s
                 SPEAK(5) ;for testing, replace with temperature value later
             
-            check_10s_flag:
-                jnb 10s_flag, check_1s_flag
-                clr 10s_flag
+            check_ToBePlayed10s:
+                jnb ToBePlayed10s, check_ToBePlayed1s
+                clr ToBePlayed10s
                 SPEAK(4) ;for testing, replace with temperature value later
             
-            check_1s_flag:
-                jnb 1s_flag, check_degrees_flag
-                clr 1s_flag
+            check_ToBePlayed1s:
+                jnb ToBePlayed1s, check_ToBePlayedDegreeC_flag
+                clr ToBePlayed1s
                 SPEAK(1) ;for testing, replace with temperature value later
             
-            check_degrees_flag:
-                jnb degrees, clear_play_status
-                clr degrees
-                SPEAK(degrees_value) ;replace with degrees value in memory
+            check_ToBePlayedDegreeC_flag:
+                jnb ToBePlayedDegreeC, clear_play_status
+                clr ToBePlayedDegreeC
+                SPEAK(ToBePlayedDegreeC_value) ;replace with ToBePlayedDegreeC value in memory
                 ljmp end_of_audio_func
             
             clear_play_status:
-                clr play
+                clr SoundIsPlaying
 
     end_of_audio_func:
     ;will have return statement here in actual implementation
