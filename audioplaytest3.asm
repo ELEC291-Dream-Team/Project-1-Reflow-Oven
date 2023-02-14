@@ -70,6 +70,8 @@ SPI_SCLK equ P3.2
 
 SPEAKER  EQU P2.4 ; Used with a MOSFET to turn off speaker when not in usebcd
 
+5s_BTN EQU P ;Used for simulating 5s timer
+
 ; The pins used for SPI
 FLASH_CE  EQU  P3.5
 MY_MOSI   EQU  P3.3 
@@ -203,6 +205,7 @@ Timer1_ISR:
 	    clr SPEAKER ; Turn off speaker.  Removes hissing noise when not playing sound.
 	    mov DADH, #0x80 ; middle of range
 	    orl DADC, #0b_0100_0000 ; Start DAC by setting GO/BSY=1
+        clr is_playing
 
     Timer1_ISR_Done:	
 	pop psw
@@ -350,7 +353,57 @@ reset:
     
     loop:
         
+        5s_button_sim:
+        jb 5s_BTN, audio_func
+        Wait_Milli_Seconds(#5)
+        jb 5s_BTN, audio_func
+        jnb 5s_BTN, $
+        setb 5s_flag
 
+    audio_func:
+
+        ;check whether 5s flag has been set
+        jnb 5s_flag, check_play_status
+        setb play
+        setb 100s_flag
+        setb 10s_flag
+        setb 1s_flag
+        setb degrees
+        clr 5s_flag
+
+    check_play_status:
+
+        jnb play, end_of_audio_func
+
+        check_is_playing:
+            jb is_playing, end_of_audio_func
+
+            check_100s_flag:
+                jnb 100s_flag, check_10s_flag
+                clr 100s_flag
+                SPEAK(5) ;for testing, replace with temperature value later
+            
+            check_10s_flag:
+                jnb 10s_flag, check_1s_flag
+                clr 10s_flag
+                SPEAK(4) ;for testing, replace with temperature value later
+            
+            check_1s_flag:
+                jnb 1s_flag, check_degrees_flag
+                clr 1s_flag
+                SPEAK(1) ;for testing, replace with temperature value later
+            
+            check_degrees_flag:
+                jnb degrees, clear_play_status
+                clr degrees
+                SPEAK(degrees_value) ;replace with degrees value in memory
+                ljmp end_of_audio_func
+            
+            clear_play_status:
+                clr play
+
+    end_of_audio_func:
+    ;will have return statement here in actual implementation
 
     ljmp loop 
 
