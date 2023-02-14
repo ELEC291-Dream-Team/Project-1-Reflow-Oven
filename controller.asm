@@ -145,6 +145,26 @@ Done_display_2:         db '  Home in xxs   ', 0
 Cancelled_display_1:    db '   Cancelled    ', 0
 Cancelled_display_2:    db '  Home in xxs   ', 0
 
+SerialSend3BCD mac
+    mov a, %0+1
+    anl a, #0x0f
+    orl a, #0x30
+    lcall SerialPutChar
+    mov a, %0+0
+    swap a
+    anl a, #0x0f
+    orl a, #0x30
+    lcall SerialPutChar
+    mov a, %0+0
+    anl a, #0x0f
+    orl a, #0x30
+    lcall SerialPutChar
+    mov a, #'\r'
+    lcall SerialPutChar
+    mov a, #'\n'
+    lcall SerialPutChar
+endmac
+
 LCDSend3BCD mac
     mov a, %0+1
     anl a, #0x0f
@@ -371,6 +391,7 @@ Timer2_ISR:
 	cjne a, #100, Counter100msnotOverflow 
 	    mov Counter100ms, #0x00
         lcall ReadTemp
+        SerialSend3BCD(OvenTempBCD)
     Counter100msnotOverflow:
 
     mov a, Counter5s
@@ -506,26 +527,6 @@ SerialPutChar:
     clr TI
     mov SBUF, a
 ret
-
-SerialSend3BCD mac
-    mov a, %0+1
-    anl a, #0x0f
-    orl a, #0x30
-    lcall SerialPutChar
-    mov a, %0+0
-    swap a
-    anl a, #0x0f
-    orl a, #0x30
-    lcall SerialPutChar
-    mov a, %0+0
-    anl a, #0x0f
-    orl a, #0x30
-    lcall SerialPutChar
-    mov a, #'\r'
-    lcall SerialPutChar
-    mov a, #'\n'
-    lcall SerialPutChar
-endmac
 
 SerialSendString:
     clr A
@@ -768,6 +769,9 @@ setup:
     ; WriteData(#0x04)
     ; WriteData(#0x03)
     ; WriteData(#0x00)
+ret
+
+soundHandler:
 ret
 
 reset:
@@ -1256,7 +1260,9 @@ RampToSoak:
             ljmp Soak
         soakTempNotReached:
         setb EA
-        ; sound checking for play
+
+        lcall soundHandler
+
     ljmp RampToSoakLoop
 
 Soak:
@@ -1286,6 +1292,9 @@ Soak:
         jnz stillSoaking
             ljmp RampToReflow
         stillSoaking:
+        
+        lcall soundHandler
+
     ljmp SoakLoop
 
 RampToReflow:
@@ -1317,6 +1326,8 @@ RampToReflow:
             ljmp Reflow
         ReflowTempNotReached:
         setb EA
+        
+        lcall soundHandler
 
     ljmp RampToReflowLoop
 
@@ -1346,7 +1357,9 @@ Reflow:
         jnz stillReflowing
             ljmp Cooling
         stillReflowing:
-        ; update LCD
+
+        lcall soundHandler
+
     ljmp ReflowLoop
 
 Cooling:
@@ -1374,6 +1387,8 @@ Cooling:
             ljmp start
         ovenStillHot:
         setb EA
+
+        lcall soundHandler
 
     ljmp CoolingLoop
 
