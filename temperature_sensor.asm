@@ -119,9 +119,9 @@ SendString:
 SendStringDone:
     ret
 
-Read_ADC_Channel MAC
+Average_CH MAC
 	mov b, #%0
-	lcall _Read_ADC_Channel
+	lcall _Average_CH
 ENDMAC
 
 ; Code adapted from prof code
@@ -129,11 +129,11 @@ Wait10us:
 	mov r0, #74
 	djnz r0, $
 	ret
-Average_CH0:
+_Average_CH:
 	Load_x(0)
 	mov r5, #100
 Sum_Loop0:
-	Read_ADC_Channel(1)
+	lcall _Read_ADC_Channel
 	mov y+3, #0
 	mov y+2, #0
 	mov y+1, r7
@@ -236,7 +236,7 @@ endmac
 MainProgram:
     mov SP, #7FH ; Set the stack pointer to the begining of idata
     lcall InitSerialPort
-	lcall Average_CH0
+	Average_CH(1)
 	Send_BCD(bcd)
 	mov a, #'\r'
 	lcall putchar
