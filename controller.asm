@@ -1,5 +1,6 @@
 org 0x0000
     ljmp reset ; Reset vector
+    ; ljmp debug
 org 0x0003 ; External interrupt 0 vector (not used in this code)
 	reti
 org 0x000B ; Timer/Counter 0 overflow interrupt vector
@@ -27,8 +28,8 @@ TIMER2_RELOAD equ ((65536-(CLK/TIMER2_RATE)))
 BAUDRATE      equ 115200
 BRG_VAL       equ (0x100-(CLK/(16*BAUDRATE)))
 
-PWM_PERIOD equ 200
-PID_PERIOD equ 500
+PWM_PERIOD equ 200 ; is 1 byte
+PID_PERIOD equ 20 ; 1 byte
 
 ; io pins
 LEFT      equ P2.7
@@ -78,7 +79,7 @@ dseg at 0x30
     Counter100ms:  ds 1
     Counter5s:     ds 1
     CounterPWM:    ds 1
-    CounterPID:    ds 2
+    CounterPID:    ds 1
     WaitCountBCD:  ds 2
     RunTimeBCD:    ds 2
 ; parameter variables
@@ -104,25 +105,34 @@ dseg at 0x30
     PWMCompare:   ds 1
 
 bseg
+; math32
 mf:                 dbit 1 ; math32 bit variable
-Updated:            dbit 1 ; updated display flag
+; LCD
+ParametersUpdated:  dbit 1 ; ParametersUpdated display flag
+; timer
 WaitFlag:           dbit 1 ; wait 30 sec flag
 RunTimeFlag:        dbit 1 ; start runtimer flag
 MaintainTargetTemp: dbit 1
 FiveSecondsFlag:    dbit 1
-AudioIsPlaying:     dbit 1
+; sound
+SoundIsPlaying:     dbit 1
+SpeakerIsBusy:      dbit 1
+ToBePlayed100s:     dbit 1
+ToBePlayed10s:      dbit 1
+ToBePlayed1s:       dbit 1
+ToBePlayedDegreeC:  dbit 1
 
 cseg
 ;                      		1234567890123456
 Start_display_1:   		db '   RIZZOVEN69   ', 0
-Start_display_2:   		db '  Press Start   ', 0
+Start_display_2:   		db '  Press  Start  ', 0
 Parameter_display_1:   	db 'Soak   xxxC xxxs', 0
 Parameter_display_2:   	db 'Reflow xxxC xxxs', 0
 Ready_display_1:        db '     Ready      ', 0
 Ready_display_2:        db '  Press Start   ', 0
 R2Soak_display_1:       db '  Ramp to Soak  ', 0
 R2Soak_display_2:       db '  xxxC    xxxs  ', 0
-Soak_display_1:         db '  Preheat/Soak  ', 0
+Soak_display_1:         db '      Soak      ', 0
 Soak_display_2:         db '  xxxC    xxxs  ', 0
 R2Reflow_display_1:     db ' Ramp to Reflow ', 0
 R2Reflow_display_2:     db '  xxxC    xxxs  ', 0
@@ -134,6 +144,22 @@ Done_display_1:         db ' Safe to Handle ', 0
 Done_display_2:         db '  Home in xxs   ', 0
 Cancelled_display_1:    db '   Cancelled    ', 0
 Cancelled_display_2:    db '  Home in xxs   ', 0
+
+LCDSend3BCD mac
+    mov a, %0+1
+    anl a, #0x0f
+    orl a, #0x30
+    lcall ?WriteData
+    mov a, %0+0
+    swap a
+    anl a, #0x0f
+    orl a, #0x30
+    lcall ?WriteData
+    mov a, %0+0
+    anl a, #0x0f
+    orl a, #0x30
+    lcall ?WriteData
+endmac
 
 mov2Bytes mac
     mov %0+1, %1+1
@@ -207,7 +233,7 @@ Timer1_ISR:
 	lcall Send_SPI
 	mov a, FlashReadAddr+0
 	lcall Send_SPI
-    mov a, #0x00
+    mov a, #0x69
 	lcall Send_SPI
 
     setb CS_FLASH
@@ -228,6 +254,7 @@ Timer1_ISR:
 	sjmp Timer1_ISR_Done
 
     stop_playing:
+        clr SpeakerIsBusy
 	    clr TR1 ; Stop timer 1
 	    setb CS_FLASH  ; Disable SPI Flash
 	    clr SPEAKER_E ; Turn off speaker.  Removes hissing noise when not playing sound.
@@ -271,11 +298,11 @@ Timer2_ISR:
 	inc Counter1000ms+1
     incCounter1000msDone:
 
-    ; if statement to inc or not
-        inc Counter100ms
+    inc Counter100ms
 
-    ; if statement to inc or not
-        inc CounterPWM
+    inc CounterPWM
+
+    inc CounterPID
 
     ; if Counter1000ms overflows
     mov a, Counter1000ms+0
@@ -286,56 +313,57 @@ Timer2_ISR:
 
         inc Counter5s
 
-        jnb RunTimeFlag, JumpLabel
+        jnb RunTimeFlag, IncrementRunTimeDone
             mov a, RunTimeBCD+0
             add a, #0x01
             da a
             mov RunTimeBCD+0, a
-            jnz JumpLabel
+            jnz IncrementRunTimeDone
             mov a, RunTimeBCD+1
             add a, #0x01
             da a
             mov RunTimeBCD+1, a
-        JumpLabel:
+        IncrementRunTimeDone:
         jnb WaitFlag, Counter1000msnotOverflow
-            mov a, WaitCountBCD+1
-            add a, #0x99
-            da a
-            mov WaitCountBCD+1, a
-            cjne a, #0x99, Counter1000msnotOverflow
             mov a, WaitCountBCD+0
             add a, #0x99
             da a
             mov WaitCountBCD+0, a
+            cjne a, #0x99, Counter1000msnotOverflow
+            mov a, WaitCountBCD+1
+            add a, #0x99
+            da a
+            mov WaitCountBCD+1, a
     Counter1000msnotOverflow:
 
-    mov a, CounterPID+0
-	cjne a, #low(PID_PERIOD), CounterPIDnotOverflow 
-	mov a, CounterPID+1
-	cjne a, #high(PID_PERIOD), CounterPIDnotOverflow
-        zero2Bytes(CounterPID)
+    mov a, CounterPID
+	cjne a, #PID_PERIOD, CounterPIDnotOverflow 
+        mov CounterPID, #0x00
         jnb MaintainTargetTemp, CounterPIDnotOverflow
             ; do calculation: OvenTemp -> PWMDutyCycle
+
             Load_x(0)
             mov2Bytes(x, TargetTemp)
             Load_y(0)
             mov2Bytes(y, OvenTemp)
 
-            lcall sub32 ; x contains the error
-
-            Load_y(0)
-            mov y+0, PWMDutyCycle
-
-            lcall add32 ; x = PWMDutyCycle + error
-
-            Load_y(PWM_PERIOD)
             lcall x_gt_y
 
-            jnb mf, notLargerThanMax
-                Load_X(PWM_PERIOD)
-            notLargerThanMax:
-
-            mov PWMDutyCycle, x
+            jnb mf, OvenIsHigherThanSet
+                mov a, PWMDutyCycle
+                cjne a, #PWM_PERIOD, doInc
+                    sjmp skipInc
+                    doInc:
+                    inc a
+                    mov PWMDutyCycle, a
+                skipInc:
+                ljmp CounterPIDnotOverflow
+            OvenIsHigherThanSet:
+                mov a, PWMDutyCycle
+                jz skipDec
+                    dec a
+                    mov PWMDutyCycle, a
+                skipDec:
     CounterPIDnotOverflow:
 
     ; if Counter100ms overflows
@@ -348,7 +376,8 @@ Timer2_ISR:
     mov a, Counter5s
 	cjne a, #5, Counter5snotOverflow 
 	    mov Counter5s, #0x00
-        setb FiveSecondsFlag
+        jnb RunTimeFlag, Counter5snotOverflow
+            setb FiveSecondsFlag
     Counter5snotOverflow:
 
     mov a, CounterPWM
@@ -407,29 +436,24 @@ ReadTemp:
     lcall div32
     Load_y(273)
     lcall sub32
-    mov ColdTemp+1, x+1
-    mov ColdTemp+0, x+0
+    mov2Bytes(ColdTemp, x)
     
     readVoltageChannel(6)
     Load_y(1000)
     lcall mul32
     Load_y(12341)
     lcall div32
-    mov HotTemp+1, x+1
-    mov HotTemp+0, x+0
+    mov2Bytes(HotTemp, x)
     
     mov y+3, #0x00
     mov y+2, #0x00
-    mov y+1, ColdTemp+1
-    mov y+0, ColdTemp+0
+    mov2Bytes(y, ColdTemp)
     lcall add32
 
-    mov OvenTemp+1, x+1
-    mov OvenTemp+0, x+0
+    mov2Bytes(OvenTemp, x)
 
     lcall hex2bcd
-    mov OvenTempBCD+1, bcd+1
-    mov OvenTempBCD+0, bcd+0
+    mov2Bytes(OvenTempBCD, bcd)
 ret
 
 Send_SPI:
@@ -522,22 +546,6 @@ LCDSendString:
     sjmp LCDSendString
     LCDSendStringDone:
 ret
-
-LCDSend3BCD mac
-    mov a, %0+1
-    anl a, #0x0f
-    orl a, #0x30
-    lcall ?WriteData
-    mov a, %0+0
-    swap a
-    anl a, #0x0f
-    orl a, #0x30
-    lcall ?WriteData
-    mov a, %0+0
-    anl a, #0x0f
-    orl a, #0x30
-    lcall ?WriteData
-endmac
 
 ifPressedJumpTo mac
     jb %0, %0%1%2noPress
@@ -649,21 +657,21 @@ Load_Configuration:
 	read2Bytes(ReflowTimeBCD) ; 0x7f86
     ret
     Load_Defaults: ; Load defaults if 'keys' are incorrect
-	    mov SoakTempBCD+1, #0x01
-	    mov SoakTempBCD+0, #0x50
-	    mov SoakTimeBCD+1, #0x00
-	    mov SoakTimeBCD+0, #0x45
-	    mov ReflowTempBCD+1, #0x02
-	    mov ReflowTempBCD+0, #0x25
-	    mov ReflowTimeBCD+1, #0x00
-	    mov ReflowTimeBCD+0, #0x30
+	mov SoakTempBCD+1, #0x01
+	mov SoakTempBCD+0, #0x50
+	mov SoakTimeBCD+1, #0x00
+	mov SoakTimeBCD+0, #0x45
+	mov ReflowTempBCD+1, #0x02
+	mov ReflowTempBCD+0, #0x25
+	mov ReflowTimeBCD+1, #0x00
+	mov ReflowTimeBCD+0, #0x30
 ret
 
-updateDisplay:
-    jb Updated, _clearUpdated ; if !Updated skip print
-    ljmp _updateDisplayDone
+updateDisplayParameters:
+    jb ParametersUpdated, _clearUpdated ; if !ParametersUpdated skip print
+    ljmp updateDisplayParametersDone
     _clearUpdated:
-        clr Updated
+        clr ParametersUpdated
         ; Display Soak Temp
         Set_Cursor(1,8)
         LCDSend3BCD(SoakTempBCD)
@@ -680,7 +688,19 @@ updateDisplay:
         Set_Cursor(2,13)
         LCDSend3BCD(ReflowTimeBCD)
 
-    _updateDisplayDone:
+    updateDisplayParametersDone:
+ret
+
+updateDisplayReflow:
+    Set_Cursor(2,3)
+    LCDSend3BCD(OvenTempBCD)
+    Set_Cursor(2,11)
+    LCDSend3BCD(RunTimeBCD)
+
+    ; Set_Cursor(1,1)
+    ; LCDSend3BCD(PWMDutyCycle)
+    ; LCDSend3BCD(TargetTemp)
+    ; LCDSend3BCD(OvenTemp)
 ret
 
 setup:
@@ -696,6 +716,21 @@ setup:
     mov P3M1, #0
     mov P4M0, #0
     mov P4M1, #0
+    
+    Wait_Milli_Seconds(#10)
+    lcall LCD_4BIT
+    Wait_Milli_Seconds(#10)
+    lcall DAC_Init
+    Wait_Milli_Seconds(#10)
+    lcall Timer1_Init
+    Wait_Milli_Seconds(#10)
+    lcall Timer2_Init
+    Wait_Milli_Seconds(#10)
+    lcall InitSPI
+    Wait_Milli_Seconds(#10)
+    lcall Load_Configuration ; Update parameters with flash memory
+    Wait_Milli_Seconds(#10)
+    lcall InitSerialPort
 
     setb LEFT
     setb RIGHT
@@ -708,20 +743,20 @@ setup:
     mov PWMDutyCycle, #0x00
     
     setb EA   ; Enable Global interrupts
-    setb Updated ; Update the display on reset
+    setb ParametersUpdated ; Update the display on reset
     clr WaitFlag ; WaitFlag off initially
     clr RunTimeFlag ; RunTimeFlag off initially
+    clr MaintainTargetTemp 
+    clr FiveSecondsFlag    
+    clr SoundIsPlaying     
+    clr SpeakerIsBusy      
+    clr ToBePlayed100s     
+    clr ToBePlayed10s      
+    clr ToBePlayed1s       
+    clr ToBePlayedDegreeC
 
     Load_x(0)
     lcall hex2bcd
-
-    lcall DAC_Init
-    lcall Timer1_Init
-    lcall Timer2_Init
-    lcall InitSPI
-    lcall LCD_4BIT
-    lcall Load_Configuration ; Update parameters with flash memory
-    lcall InitSerialPort
 
     ; custom degree C character
     ; WriteCommand(#0x40)
@@ -736,7 +771,9 @@ setup:
 ret
 
 reset:
+    Wait_Milli_Seconds(#0xff)
     lcall setup
+    Wait_Milli_Seconds(#0xff)
 
 start:
     ; display start message
@@ -762,7 +799,7 @@ adjustParameters:
 
     WriteCommand(#0x0e) ; show cursor, no blink
 
-    setb Updated
+    setb ParametersUpdated
 
 	; ----------------------------------------------;
 	; ------------- Soak Temperature ---------------;
@@ -778,7 +815,7 @@ adjustParameters:
             da a
             anl a, #0x0f
             mov SoakTempBCD+1, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustSoakTemp100a:     
         ifNotPressedJumpTo(DOWN, _adjustSoakTemp100b)
@@ -788,10 +825,10 @@ adjustParameters:
             da a
             anl a, #0x0f
             mov SoakTempBCD+1, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustSoakTemp100b:
-        lcall updateDisplay ; update param display
+        lcall updateDisplayParameters ; update param display
         
     ljmp adjustSoakTemp100 
     
@@ -805,7 +842,7 @@ adjustParameters:
             add a, #0x10
             da a
             mov SoakTempBCD+0, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustSoakTemp010a:     
         ifNotPressedJumpTo(DOWN, _adjustSoakTemp010b)
@@ -814,10 +851,10 @@ adjustParameters:
             add a, #0x90
             da a
             mov SoakTempBCD+0, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustSoakTemp010b:
-        lcall updateDisplay ; update param display
+        lcall updateDisplayParameters ; update param display
         
     ljmp adjustSoakTemp010 
     
@@ -835,7 +872,7 @@ adjustParameters:
             anl b, #0xf0
             orl a, b
             mov SoakTempBCD+0, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustSoakTemp001a:     
         ifNotPressedJumpTo(DOWN, _adjustSoakTemp001b)
@@ -848,10 +885,10 @@ adjustParameters:
             anl b, #0xf0
             orl a, b
             mov SoakTempBCD+0, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustSoakTemp001b:
-        lcall updateDisplay ; update param display
+        lcall updateDisplayParameters ; update param display
         
     ljmp adjustSoakTemp001
     
@@ -869,7 +906,7 @@ adjustParameters:
             da a
             anl a, #0x0f
             mov SoakTimeBCD+1, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustSoakTime100a:     
         ifNotPressedJumpTo(DOWN, _adjustSoakTime100b)
@@ -879,10 +916,10 @@ adjustParameters:
             da a
             anl a, #0x0f
             mov SoakTimeBCD+1, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustSoakTime100b:
-        lcall updateDisplay ; update param display
+        lcall updateDisplayParameters ; update param display
         
     ljmp adjustSoakTime100 
     
@@ -896,7 +933,7 @@ adjustParameters:
             add a, #0x10
             da a
             mov SoakTimeBCD+0, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustSoakTime010a:     
         ifNotPressedJumpTo(DOWN, _adjustSoakTime010b)
@@ -905,10 +942,10 @@ adjustParameters:
             add a, #0x90
             da a
             mov SoakTimeBCD+0, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustSoakTime010b:
-        lcall updateDisplay ; update param display
+        lcall updateDisplayParameters ; update param display
         
     ljmp adjustSoakTime010 
     
@@ -926,7 +963,7 @@ adjustParameters:
             anl b, #0xf0
             orl a, b
             mov SoakTimeBCD+0, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustSoakTime001a:     
         ifNotPressedJumpTo(DOWN, _adjustSoakTime001b)
@@ -939,10 +976,10 @@ adjustParameters:
             anl b, #0xf0
             orl a, b
             mov SoakTimeBCD+0, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustSoakTime001b:
-        lcall updateDisplay ; update param display
+        lcall updateDisplayParameters ; update param display
         
     ljmp adjustSoakTime001
     
@@ -960,7 +997,7 @@ adjustParameters:
             da a
             anl a, #0x0f
             mov ReflowTempBCD+1, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustReflowTemp100a:     
         ifNotPressedJumpTo(DOWN, _adjustReflowTemp100b)
@@ -970,10 +1007,10 @@ adjustParameters:
             da a
             anl a, #0x0f
             mov ReflowTempBCD+1, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustReflowTemp100b:
-        lcall updateDisplay ; update param display
+        lcall updateDisplayParameters ; update param display
         
     ljmp adjustReflowTemp100 
     
@@ -987,7 +1024,7 @@ adjustParameters:
             add a, #0x10
             da a
             mov ReflowTempBCD+0, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustReflowTemp010a:     
         ifNotPressedJumpTo(DOWN, _adjustReflowTemp010b)
@@ -996,10 +1033,10 @@ adjustParameters:
             add a, #0x90
             da a
             mov ReflowTempBCD+0, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustReflowTemp010b:
-        lcall updateDisplay ; update param display
+        lcall updateDisplayParameters ; update param display
         
     ljmp adjustReflowTemp010 
     
@@ -1017,7 +1054,7 @@ adjustParameters:
             anl b, #0xf0
             orl a, b
             mov ReflowTempBCD+0, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustReflowTemp001a:     
         ifNotPressedJumpTo(DOWN, _adjustReflowTemp001b)
@@ -1030,10 +1067,10 @@ adjustParameters:
             anl b, #0xf0
             orl a, b
             mov ReflowTempBCD+0, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustReflowTemp001b:
-        lcall updateDisplay ; update param display
+        lcall updateDisplayParameters ; update param display
         
     ljmp adjustReflowTemp001
     
@@ -1051,7 +1088,7 @@ adjustParameters:
             da a
             anl a, #0x0f
             mov ReflowTimeBCD+1, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustReflowTime100a:     
         ifNotPressedJumpTo(DOWN, _adjustReflowTime100b)
@@ -1061,10 +1098,10 @@ adjustParameters:
             da a
             anl a, #0x0f
             mov ReflowTimeBCD+1, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustReflowTime100b:
-        lcall updateDisplay ; update param display
+        lcall updateDisplayParameters ; update param display
         
     ljmp adjustReflowTime100 
     
@@ -1078,7 +1115,7 @@ adjustParameters:
             add a, #0x10
             da a
             mov ReflowTimeBCD+0, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustReflowTime010a:     
         ifNotPressedJumpTo(DOWN, _adjustReflowTime010b)
@@ -1087,10 +1124,10 @@ adjustParameters:
             add a, #0x90
             da a
             mov ReflowTimeBCD+0, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustReflowTime010b:
-        lcall updateDisplay ; update param display
+        lcall updateDisplayParameters ; update param display
         
     ljmp adjustReflowTime010 
     
@@ -1104,7 +1141,7 @@ adjustParametersEnd:
 
     WriteCommand(#0x0e) ; show cursor, no blink
 
-    setb Updated
+    setb ParametersUpdated
 
     adjustReflowTime001:
         Set_Cursor(2,15)
@@ -1120,7 +1157,7 @@ adjustParametersEnd:
             anl b, #0xf0
             orl a, b
             mov ReflowTimeBCD+0, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustReflowTime001a:     
         ifNotPressedJumpTo(DOWN, _adjustReflowTime001b)
@@ -1133,10 +1170,10 @@ adjustParametersEnd:
             anl b, #0xf0
             orl a, b
             mov ReflowTimeBCD+0, a
-            setb Updated
+            setb ParametersUpdated
 
         _adjustReflowTime001b:
-        lcall updateDisplay ; update param display
+        lcall updateDisplayParameters ; update param display
         
     ljmp adjustReflowTime001
 ; end of adjustParameters state
@@ -1147,6 +1184,7 @@ ready:
     Send_Constant_String(#Ready_display_1)
     Set_cursor(2, 1)
     Send_Constant_String(#Ready_display_2)
+
     WriteCommand(#0x0c) ; hide cursor, no blink
 
     ; Update the flash memory
@@ -1163,17 +1201,14 @@ ready:
     mov2Bytes(bcd, SoakTempBCD)
     lcall bcd2hex
     mov2Bytes(SoakTempHex, x)
-
     ; Update Soak Time Hex
     mov2Bytes(bcd, SoakTimeBCD)
     lcall bcd2hex
     mov2Bytes(SoakTimeHex, x)
-
     ; Update Reflow Temp Hex
     mov2Bytes(bcd, ReflowTempBCD)
     lcall bcd2hex
     mov2Bytes(ReflowTempHex, x)
-
     ; Update Reflow Time Hex
     mov2Bytes(bcd, ReflowTimeBCD)
     lcall bcd2hex
@@ -1195,9 +1230,10 @@ RampToSoak:
     Send_Constant_String(#R2Soak_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
 
-    setb RunTimeFlag
+    mov Counter5s, #0x00
     zero2Bytes(RunTimeBCD)
     zero2Bytes(Counter1000ms)
+    setb RunTimeFlag
 
     ; 100% power
     clr MaintainTargetTemp
@@ -1206,12 +1242,20 @@ RampToSoak:
 
     RampToSoakLoop:
         ifPressedJumpTo(STARTSTOP, Cancelled, 1) ; Cancel if stop button pressed
-        Set_Cursor(2,3)
-        LCDSend3BCD(OvenTempBCD)
-        Set_Cursor(2,11)
-        LCDSend3BCD(RunTimeBCD)
-        mov a, OvenTemp
-        cjne a, SoakTempHex, RampToSoakLoop ; Loop intil OvenTemp = SoakTemp
+        
+        lcall updateDisplayReflow
+
+        clr EA
+        Load_x(0)
+        mov2Bytes(x, OvenTemp)
+        Load_y(0)
+        mov2Bytes(y, SoakTempHex)
+        lcall x_gt_y
+        jnb mf, soakTempNotReached ; Loop intil OvenTemp = SoakTemp
+            setb EA
+            ljmp Soak
+        soakTempNotReached:
+        setb EA
         ; sound checking for play
     ljmp RampToSoakLoop
 
@@ -1224,22 +1268,24 @@ Soak:
     WriteCommand(#0x0c) ; hide cursor, no blink
 
     ; activate PID
-    mov TargetTemp, SoakTempHex
+    mov2Bytes(TargetTemp, SoakTempHex)
     setb MaintainTargetTemp
     mov2Bytes(WaitCountBCD, SoakTimeBCD)
     zero2Bytes(Counter1000ms)
     setb WaitFlag
+    mov PWMDutyCycle, #100
 
     SoakLoop:
         ifPressedJumpTo(STARTSTOP, Cancelled, 2) ; Cancel if stop button pressed
-        lcall ReadTemp
+
+        lcall updateDisplayReflow
+
         mov a, WaitCountBCD+1
         jnz stillSoaking
         mov a, WaitCountBCD+0
         jnz stillSoaking
-            ljmp Cooling
+            ljmp RampToReflow
         stillSoaking:
-        ; update LCD
     ljmp SoakLoop
 
 RampToReflow:
@@ -1257,9 +1303,21 @@ RampToReflow:
 
     RampToReflowLoop:
         ifPressedJumpTo(STARTSTOP, Cancelled, 3) ; Cancel if stop button pressed
-        lcall ReadTemp
-        ; jmp to reflow if temp >= reflow temp
-        ; update LCD
+
+        lcall updateDisplayReflow
+
+        clr EA
+        Load_x(0)
+        mov2Bytes(x, OvenTemp)
+        Load_y(0)
+        mov2Bytes(y, ReflowTempHex)
+        lcall x_gt_y
+        jnb mf, ReflowTempNotReached ; Loop intil OvenTemp = SoakTemp
+            setb EA
+            ljmp Reflow
+        ReflowTempNotReached:
+        setb EA
+
     ljmp RampToReflowLoop
 
 Reflow:
@@ -1271,7 +1329,7 @@ Reflow:
     WriteCommand(#0x0c) ; hide cursor, no blink
 
     ; activate PID to maintain reflow temp, handled in the timer2 ISR
-    mov TargetTemp, ReflowTempHex
+    mov2Bytes(TargetTemp, ReflowTempHex)
     setb MaintainTargetTemp
     mov2Bytes(WaitCountBCD, ReflowTimeBCD)
     zero2Bytes(Counter1000ms)
@@ -1279,7 +1337,9 @@ Reflow:
 
     ReflowLoop:
         ifPressedJumpTo(STARTSTOP, Cancelled, 4) ; Cancel if stop button pressed
-        lcall ReadTemp
+
+        lcall updateDisplayReflow
+
         mov a, WaitCountBCD+1
         jnz stillReflowing
         mov a, WaitCountBCD+0
@@ -1302,9 +1362,19 @@ Cooling:
     mov PWMDutyCycle, #0x00
 
     CoolingLoop:
-        lcall ReadTemp
-        ; jmp to Done/home if temp <= 60
-        ; update LCD
+        lcall updateDisplayReflow
+
+        clr EA
+        Load_y(60)
+        Load_x(0)
+        mov2Bytes(x, OvenTemp)
+        lcall x_lt_y
+        jnb mf, ovenStillHot
+            setb EA
+            ljmp start
+        ovenStillHot:
+        setb EA
+
     ljmp CoolingLoop
 
 Done:
@@ -1315,18 +1385,22 @@ Done:
     WriteCommand(#0x0c) ; hide cursor, no blink
 
     ; safe to touch if currentTemp < 60
-    setb WaitFlag
-    mov WaitCountBCD+0, #0x15
+    clr RunTimeFlag
+    clr MaintainTargetTemp
     zero2Bytes(Counter1000ms)
+    mov PWMDutyCycle, #0x00
+    mov WaitCountBCD+0, #0x15
+    setb WaitFlag
 
     DoneLoop:
         ifPressedJumpTo(STARTSTOP, start, 1) ; Return to the menu if start button pressed
         Set_Cursor(2,11)
-        Display_BCD(WaitCountBCD) ; display WaitCountBCD
-        mov a, WaitCountBCD
+        Display_BCD(WaitCountBCD+0) ; display WaitCountBCD
+        mov a, WaitCountBCD+0
         cjne a, #0x99, DoneLoop ; wait 15 sec
         clr WaitFlag
         ljmp start
+    ljmp DoneLoop
 
 Cancelled:
     Set_Cursor(1, 1) ; display Cancelled message
@@ -1335,9 +1409,12 @@ Cancelled:
     Send_Constant_String(#Cancelled_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
 
-    setb WaitFlag
-    mov WaitCountBCD+0, #0x15
+    clr RunTimeFlag
+    clr MaintainTargetTemp
     zero2Bytes(Counter1000ms)
+    mov PWMDutyCycle, #0x00
+    mov WaitCountBCD+0, #0x15
+    setb WaitFlag
 
     CancelledLoop:
         ifPressedJumpTo(STARTSTOP, start, 2) ; Return to the menu if start button pressed
@@ -1347,4 +1424,23 @@ Cancelled:
         cjne a, #0x99, CancelledLoop ; wait 15 sec
         clr WaitFlag
         ljmp start
+    ljmp CancelledLoop
+
+debug:
+    lcall setup
+    clr MaintainTargetTemp
+
+    Load_y(3)
+    Load_x(2)
+
+    lcall x_lt_y
+
+        jnb mf, noone
+            setb OVEN
+        sjmp debugLoop
+        noone:
+            clr OVEN
+    debugLoop:
+    ljmp debugLoop
+
 END
