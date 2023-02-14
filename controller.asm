@@ -96,11 +96,12 @@ dseg at 0x30
     w:             ds 3
     FlashReadAddr: ds 3
 ; temp variables
-    ColdTemp:    ds 2
-    HotTemp:     ds 2
-    OvenTemp:    ds 2
-    OvenTempBCD: ds 2
-    TargetTemp:  ds 2
+    ColdTemp:          ds 2
+    HotTemp:           ds 2
+    OvenTemp:          ds 2
+    OvenTempBCD:       ds 2
+    TargetTemp:        ds 2
+    TempToBePlayedBCD: ds 2
 ; PWM variables
     PWMDutyCycle: ds 1
     PWMCompare:   ds 1
@@ -892,6 +893,7 @@ soundHandler:
         setb ToBePlayed1s
         setb ToBePlayedDegreeC
         setb SoundIsPlaying
+        mov2Bytes(TempToBePlayedBCD, OvenTempBCD)
     noFiveSecond:
     jb SoundIsPlaying, psL1 ; if SoundIsPlaying
         ret
@@ -901,14 +903,16 @@ soundHandler:
         psL2:
         jnb ToBePlayed100s, L100sPlayed
             clr ToBePlayed100s
-            mov a, OvenTempBCD+1
+            mov a, TempToBePlayedBCD+1
             anl a, #0x0f
-            lcall playSound
+            jz N100sIsZero
+                lcall playSound
+            N100sIsZero:
             ret
         L100sPlayed:
         jnb ToBePlayed10s, L10sPlayed
             clr ToBePlayed10s
-            mov a, OvenTempBCD+0
+            mov a, TempToBePlayedBCD+0
             swap a
             anl a, #0x0f
             lcall playSound
@@ -916,7 +920,7 @@ soundHandler:
         L10sPlayed:
         jnb ToBePlayed1s, L1sPlayed
             clr ToBePlayed1s
-            mov a, OvenTempBCD+0
+            mov a, TempToBePlayedBCD+0
             anl a, #0x0f
             lcall playSound
             ret
