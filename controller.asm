@@ -1,6 +1,6 @@
 org 0x0000
-    ljmp reset ; Reset vector
-    ; ljmp debug
+    ; ljmp reset ; Reset vector
+    ljmp debug
 org 0x0003 ; External interrupt 0 vector (not used in this code)
 	reti
 org 0x000B ; Timer/Counter 0 overflow interrupt vector
@@ -30,6 +30,7 @@ BRG_VAL       equ (0x100-(CLK/(16*BAUDRATE)))
 
 PWM_PERIOD equ 200 ; is 1 byte
 PID_PERIOD equ 20 ; 1 byte
+DEGREEC    equ 0xaa
 
 ; io pins
 LEFT      equ P2.7
@@ -106,21 +107,22 @@ dseg at 0x30
 
 bseg
 ; math32
-mf:                 dbit 1 ; math32 bit variable
+    mf: dbit 1 ; math32 bit variable
 ; LCD
-ParametersUpdated:  dbit 1 ; ParametersUpdated display flag
+    ParametersUpdated: dbit 1 ; ParametersUpdated display flag
 ; timer
-WaitFlag:           dbit 1 ; wait 30 sec flag
-RunTimeFlag:        dbit 1 ; start runtimer flag
-MaintainTargetTemp: dbit 1
-FiveSecondsFlag:    dbit 1
+    WaitFlag:           dbit 1 ; wait 30 sec flag
+    RunTimeFlag:        dbit 1 ; start runtimer flag
+    MaintainTargetTemp: dbit 1
+    FiveSecondsFlag:    dbit 1
+    Flag100ms: dbit 1
 ; sound
-SoundIsPlaying:     dbit 1
-SpeakerIsBusy:      dbit 1
-ToBePlayed100s:     dbit 1
-ToBePlayed10s:      dbit 1
-ToBePlayed1s:       dbit 1
-ToBePlayedDegreeC:  dbit 1
+    SoundIsPlaying:    dbit 1
+    SpeakerIsBusy:     dbit 1
+    ToBePlayed100s:    dbit 1
+    ToBePlayed10s:     dbit 1
+    ToBePlayed1s:      dbit 1
+    ToBePlayedDegreeC: dbit 1
 
 cseg
 ;                      		1234567890123456
@@ -390,10 +392,12 @@ Timer2_ISR:
     mov a, Counter100ms
 	cjne a, #100, Counter100msnotOverflow 
 	    mov Counter100ms, #0x00
-        lcall ReadTemp
+        ; lcall ReadTemp
+        setb Flag100ms
         SerialSend3BCD(OvenTempBCD)
     Counter100msnotOverflow:
 
+    ; 5 seconds timer
     mov a, Counter5s
 	cjne a, #5, Counter5snotOverflow 
 	    mov Counter5s, #0x00
@@ -401,6 +405,7 @@ Timer2_ISR:
             setb FiveSecondsFlag
     Counter5snotOverflow:
 
+    ; PWM timer
     mov a, CounterPWM
 	cjne a, #PWM_PERIOD, CounterPWMnotOverflow 
 	    mov CounterPWM, #0x00
@@ -771,7 +776,158 @@ setup:
     ; WriteData(#0x00)
 ret
 
+playSound:
+    setb SoundIsPlaying
+    clr TR1
+    clr SPEAKER_E
+    cjne a, #0x00, notZero
+        mov FlashReadAddr+2, #0x00
+	    mov FlashReadAddr+1, #0x00
+	    mov FlashReadAddr+0, #0x00
+	    mov w+2, #0x00
+	    mov w+1, #0x2b
+	    mov w+0, #0x11
+        ljmp swFinish
+    notZero:
+    cjne a, #0x01, notOne
+        mov FlashReadAddr+2, #0x00
+	    mov FlashReadAddr+1, #0x2B
+	    mov FlashReadAddr+0, #0x11
+	    mov w+2, #0x00
+	    mov w+1, #0x2b
+	    mov w+0, #0x11
+        ljmp swFinish
+    notOne:
+    cjne a, #0x02, notTwo
+        mov FlashReadAddr+2, #0x00
+	    mov FlashReadAddr+1, #0x56
+	    mov FlashReadAddr+0, #0x22
+	    mov w+2, #0x00
+	    mov w+1, #0x2b
+	    mov w+0, #0x11
+        ljmp swFinish
+    notTwo:
+    cjne a, #0x03, notThree
+        mov FlashReadAddr+2, #0x00
+	    mov FlashReadAddr+1, #0x81
+	    mov FlashReadAddr+0, #0x33
+	    mov w+2, #0x00
+	    mov w+1, #0x2b
+	    mov w+0, #0x11
+        ljmp swFinish
+    notThree:
+    cjne a, #0x04, notFour
+        mov FlashReadAddr+2, #0x00
+	    mov FlashReadAddr+1, #0xAC
+	    mov FlashReadAddr+0, #0x44
+	    mov w+2, #0x00
+	    mov w+1, #0x2b
+	    mov w+0, #0x11
+        ljmp swFinish
+    notFour:
+    cjne a, #0x05, notFive
+        mov FlashReadAddr+2, #0x00
+	    mov FlashReadAddr+1, #0xD7
+	    mov FlashReadAddr+0, #0x55
+	    mov w+2, #0x00
+	    mov w+1, #0x2b
+	    mov w+0, #0x11
+        ljmp swFinish
+    notFive:
+    cjne a, #0x06, notSix
+        mov FlashReadAddr+2, #0x01
+	    mov FlashReadAddr+1, #0x02
+	    mov FlashReadAddr+0, #0x66
+	    mov w+2, #0x00
+	    mov w+1, #0x2b
+	    mov w+0, #0x11
+        ljmp swFinish
+    notSix:
+    cjne a, #0x07, notSeven
+        mov FlashReadAddr+2, #0x01
+	    mov FlashReadAddr+1, #0x2D
+	    mov FlashReadAddr+0, #0x77
+	    mov w+2, #0x00
+	    mov w+1, #0x2b
+	    mov w+0, #0x11
+        ljmp swFinish
+    notSeven:
+    cjne a, #0x08, notEight
+        mov FlashReadAddr+2, #0x01
+	    mov FlashReadAddr+1, #0x58
+	    mov FlashReadAddr+0, #0x88
+	    mov w+2, #0x00
+	    mov w+1, #0x2b
+	    mov w+0, #0x11
+        ljmp swFinish
+    notEight:
+    cjne a, #0x09, notNine
+        mov FlashReadAddr+2, #0x01
+	    mov FlashReadAddr+1, #0x83
+	    mov FlashReadAddr+0, #0x99
+	    mov w+2, #0x00
+	    mov w+1, #0x2b
+	    mov w+0, #0x11
+        ljmp swFinish
+    notNine:
+    cjne a, #DEGREEC, swFinish
+        mov FlashReadAddr+2, #0x01
+	    mov FlashReadAddr+1, #0xAE
+	    mov FlashReadAddr+0, #0xAA
+	    mov w+2, #0x00
+	    mov w+1, #0x2b
+	    mov w+0, #0x11
+        ljmp swFinish
+    swFinish:
+    setb SpeakerIsBusy
+    setb SPEAKER_E
+    setb TR1
+ret
+
 soundHandler:
+    jnb FiveSecondsFlag, noFiveSecond
+        clr FiveSecondsFlag
+        setb ToBePlayed100s
+        setb ToBePlayed10s
+        setb ToBePlayed1s
+        setb ToBePlayedDegreeC
+        setb SoundIsPlaying
+    noFiveSecond:
+    jb SoundIsPlaying, psL1 ; if SoundIsPlaying
+        ret
+    psL1:
+        jnb SpeakerIsBusy, psL2
+            ret
+        psL2:
+        jnb ToBePlayed100s, L100sPlayed
+            clr ToBePlayed100s
+            mov a, OvenTempBCD+1
+            anl a, #0x0f
+            lcall playSound
+            ret
+        L100sPlayed:
+        jnb ToBePlayed10s, L10sPlayed
+            clr ToBePlayed10s
+            mov a, OvenTempBCD+0
+            swap a
+            anl a, #0x0f
+            lcall playSound
+            ret
+        L10sPlayed:
+        jnb ToBePlayed1s, L1sPlayed
+            clr ToBePlayed1s
+            mov a, OvenTempBCD+0
+            anl a, #0x0f
+            lcall playSound
+            ret
+        L1sPlayed:
+        jnb ToBePlayedDegreeC, dCPlayed
+            clr ToBePlayedDegreeC
+            mov a, #DEGREEC
+            lcall playSound
+            ret
+        dCPlayed:
+        clr SoundIsPlaying
 ret
 
 reset:
@@ -1279,7 +1435,7 @@ Soak:
     mov2Bytes(WaitCountBCD, SoakTimeBCD)
     zero2Bytes(Counter1000ms)
     setb WaitFlag
-    mov PWMDutyCycle, #100
+    mov PWMDutyCycle, #0x00
 
     SoakLoop:
         ifPressedJumpTo(STARTSTOP, Cancelled, 2) ; Cancel if stop button pressed
@@ -1345,6 +1501,7 @@ Reflow:
     mov2Bytes(WaitCountBCD, ReflowTimeBCD)
     zero2Bytes(Counter1000ms)
     setb WaitFlag
+    mov PWMDutyCycle, #0x00
 
     ReflowLoop:
         ifPressedJumpTo(STARTSTOP, Cancelled, 4) ; Cancel if stop button pressed
@@ -1443,19 +1600,33 @@ Cancelled:
 
 debug:
     lcall setup
-    clr MaintainTargetTemp
-
-    Load_y(3)
-    Load_x(2)
-
-    lcall x_lt_y
-
-        jnb mf, noone
-            setb OVEN
-        sjmp debugLoop
-        noone:
-            clr OVEN
+    setb MaintainTargetTemp
+    setb RunTimeFlag
     debugLoop:
+
+        lcall ReadTemp
+
+        jb Flag100ms, L100ms
+            ljmp no100ms
+        L100ms:
+            clr Flag100ms
+            clr EA
+            readADCChannel(7)
+            Load_y(200)
+            lcall mul32
+            Load_y(1023)
+            lcall div32
+            lcall hex2bcd
+            mov2Bytes(TargetTemp, x)
+            Set_Cursor(1,1)
+            LCDSend3BCD(bcd)
+            Set_Cursor(2,1)
+            LCDSend3BCD(OvenTempBCD)
+            setb EA
+        no100ms:
+
+        lcall soundHandler
+
     ljmp debugLoop
 
 END
