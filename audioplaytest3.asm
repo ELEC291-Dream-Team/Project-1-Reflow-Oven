@@ -102,68 +102,41 @@ HotTemp: ds 4
 
 BSEG
     mf: dbit 1
+    play: dbit 1
+    5s_flag: dbit 1
+    100s_flag: dbit 1
+    10s_flag: dbit 1
+    1s_flag: dbit 1
+    degrees: dbit 1
+    is_playing: dbit 1
 
 ; Interrupt vectors:
 cseg
 
-readVoltageChannel mac ; stores the voltage in x in mV
-    Load_x(0)
+;-------------------------------------;
+; SPEAK Macro for playing a certain   ;
+; number's audio                      ;
+;-------------------------------------;
+SPEAK MAC
+	clr a
+	Load_x(%0)
+	Load_y(0x2b11)
+	lcall mul32
 
-    clr EA
-    clr ADC_CS ; Enable device (active low)
+	clr TR1 ; Stop Timer 1 ISR from playing previous request
+	clr SPEAKER ; Turn off speaker.
+    ; set starting address
+	mov FlashReadAddr+2, x+2
+	mov FlashReadAddr+1, x+1
+	mov FlashReadAddr+0, x+0
+	; How many bytes to play? All of them!  Asume 4Mbytes memory: 0x3fffff
+	mov w+2, #0x00
+    mov w+1, #0x2b
+    mov w+0, #0x11
 
-    mov a, #0x01
-    lcall Send_SPI
-    mov a, #%0
-    swap a
-    orl a, #0x80
-    lcall Send_SPI
-    anl a, #0x03
-    mov x+1, a
-    lcall Send_SPI
-    mov x+0, a
-    
-    setb ADC_CS
-    setb EA
-
-    Load_y(38)
-    lcall mul32
-    Load_y(35)
-    lcall add32
-    Load_y(10)
-    lcall div32
-endmac
-
-ReadTemp: ; stores temp in x in hex
-    readVoltageChannel(1)
-    Load_y(297)
-    lcall mul32
-    Load_y(2950)
-    lcall div32
-    Load_y(273)
-    lcall sub32
-    mov ColdTemp+3, x+3
-    mov ColdTemp+2, x+2
-    mov ColdTemp+1, x+1
-    mov ColdTemp+0, x+0
-    readVoltageChannel(6)
-    Load_y(1000)
-    lcall mul32
-    Load_y(12341)
-    lcall div32
-    mov HotTemp+3, x+3
-    mov HotTemp+2, x+2
-    mov HotTemp+1, x+1
-    mov HotTemp+0, x+0
-    
-    mov y+3, ColdTemp+3
-    mov y+2, ColdTemp+2
-    mov y+1, ColdTemp+1
-    mov y+0, ColdTemp+0
-    lcall add32
-
-    lcall hex2bcd
-ret
+    setb SPEAKER ; Turn on speaker.
+   	setb TR1 ; Start playback by enabling Timer 1
+	ENDMAC
 
 ;-------------------------------------;
 ; ISR for Timer 1.  Used to playback  ;
@@ -376,57 +349,9 @@ reset:
     lcall LCDSendString
     
     loop:
-        readVoltageChannel(1)
-        lcall hex2bcd
-        Set_Cursor(1, 5)
-        Display_BCD(bcd+1)
-        Display_BCD(bcd+0)
-
-        readVoltageChannel(6)
-        lcall hex2bcd
-        Set_Cursor(2, 5)
-        Display_BCD(bcd+1)
-        Display_BCD(bcd+0)
-
-        lcall ReadTemp
-        Set_Cursor(1, 12)
-        Display_BCD(bcd+1)
-        Display_BCD(bcd+0)
-
-        Wait_Milli_Seconds(#100)
-
-        ; for debugging sound address
-        ; Set_Cursor(2, 1)
-        ; mov x+3, #0x00
-        ; mov x+2, FlashReadAddr+2
-        ; mov x+1, FlashReadAddr+1
-        ; mov x+0, FlashReadAddr+0
-        ; lcall hex2bcd
-        ; Display_BCD(bcd+4)
-        ; Display_BCD(bcd+3)
-        ; Display_BCD(bcd+2)
-        ; Display_BCD(bcd+1)
-        ; Display_BCD(bcd+0)
         
-        jb P4.5, nopress ; Check if push-button pressed
-	    jnb P4.5, $ ; Wait for push-button release
-	    ; Play the whole memory
-	    clr TR1 ; Stop Timer 1 ISR from playing previous request
-	    clr SPEAKER ; Turn off speaker.
-    
-        ; set starting address
-	    mov FlashReadAddr+2, #0x00
-	    mov FlashReadAddr+1, #0x00
-	    mov FlashReadAddr+0, #0x00
-    
-	    ; How many bytes to play? All of them!  Asume 4Mbytes memory: 0x3fffff
-	    mov w+2, #0x00
-	    mov w+1, #0x56
-	    mov w+0, #0x22
-    
-	    setb SPEAKER ; Turn on speaker.
-	    setb TR1 ; Start playback by enabling Timer 1
-        nopress:
+
+
     ljmp loop 
 
 END
