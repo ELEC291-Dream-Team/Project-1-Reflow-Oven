@@ -72,9 +72,9 @@ READ_DEVICE_ID   EQU 0x9f  ; Address:0 Dummy:2 Num:1 to infinite
 
 dseg at 0x30
 ; math32 variables
-    x:   ds 4
-    y:   ds 4
-    bcd: ds 5
+    x:             ds 4
+    y:             ds 4
+    bcd:           ds 5
 ; timer variables
     Counter1000ms: ds 2
     Counter100ms:  ds 1
@@ -92,18 +92,25 @@ dseg at 0x30
     SoakTimeHex:   ds 2
     ReflowTempHex: ds 2
     ReflowTimeHex: ds 2
+; preset profile variables
+    100Temp:       ds 1
+    150Temp:       ds 1
+    200Temp:       ds 1
+    250Temp:       ds 1
+    30Time:        ds 1
+    60Time:        ds 1
 ; flash variables
     w:             ds 3
     FlashReadAddr: ds 3
 ; temp variables
-    ColdTemp:    ds 2
-    HotTemp:     ds 2
-    OvenTemp:    ds 2
-    OvenTempBCD: ds 2
-    TargetTemp:  ds 2
+    ColdTemp:      ds 2
+    HotTemp:       ds 2
+    OvenTemp:      ds 2
+    OvenTempBCD:   ds 2
+    TargetTemp:    ds 2
 ; PWM variables
-    PWMDutyCycle: ds 1
-    PWMCompare:   ds 1
+    PWMDutyCycle:  ds 1
+    PWMCompare:    ds 1
 
 bseg
 ; math32
@@ -128,6 +135,10 @@ cseg
 ;                      		1234567890123456
 Start_display_1:   		db '   RIZZOVEN69   ', 0
 Start_display_2:   		db '  Press  Start  ', 0
+Select_display_1:       db ' Select Profile ', 0
+Select_display_2:   	db ' A B C D CUSTOM ', 0
+A_display_1:            db 'Soak   150C 60s ', 0
+A_display_2:   	        db 'Reflow 250C 30s ', 0
 Parameter_display_1:   	db 'Soak   xxxC xxxs', 0
 Parameter_display_2:   	db 'Reflow xxxC xxxs', 0
 Ready_display_1:        db '     Ready      ', 0
@@ -722,6 +733,13 @@ setup:
     mov P3M1, #0
     mov P4M0, #0
     mov P4M1, #0
+
+    mov 100Temp, #100
+    mov 150Temp, #150
+    mov 200Temp, #200
+    mov 250Temp, #250
+    mov 30Time, #30
+    mov 60Time, #60
     
     Wait_Milli_Seconds(#10)
     lcall LCD_4BIT
@@ -948,6 +966,20 @@ start:
         ifPressedJumpTo(RIGHT, adjustParameters, 1)
     ljmp startLoop
 ; end of start state
+
+select:
+    ; display select message
+    WriteCommand(#0x0e) ; show cursor, no blink
+    Set_Cursor(1, 1)
+    Send_Constant_String(#Select_display_1)
+    Set_cursor(2, 1)
+    Send_Constant_String(#Select_display_2)
+    Set_Cursor(2,1)
+
+    selectLoop:
+        ifPressedJumpTo(STARTSTOP, adjustParameters, 1)
+        ifPressedJumpTo(RIGHT, adjustParameters, 1)
+    ljmp selectLoop
 
 adjustParameters:
     ; update display
