@@ -302,6 +302,7 @@ Timer2_ISR:
             add a, #0x99
             da a
             mov WaitCountBCD+1, a
+            cjne a, #0x99, Counter1000msnotOverflow
             mov a, WaitCountBCD+0
             add a, #0x99
             da a
@@ -1211,6 +1212,8 @@ RampToSoak:
         LCDSend3BCD(RunTimeBCD)
         mov a, OvenTemp
         cjne a, SoakTempHex, RampToSoakLoop ; Loop intil OvenTemp = SoakTemp
+        ; sound checking for play
+    ljmp RampToSoakLoop
 
 Soak:
     ; display Soak message
