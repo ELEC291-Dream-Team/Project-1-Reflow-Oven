@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import sys, time, math
 
+#import keyboard
+
 # For Simple GUI implementation
 import tkinter as tk
 from tkinter import simpledialog
@@ -15,9 +17,10 @@ xsize = 300
 
 # defining parameters
 # preheat period
-HEAT_TIME_PREHEAT = 1100
-HEAT_TIME_REFLOW = 1000 
-COOLING_TIME = 750 
+HEAT_TIME_PREHEAT = 11#0#0
+HEAT_TIME_REFLOW = 10#0#0 
+COOLING_TIME = 7#5#0 
+
 
 
 Com_Port = simpledialog.askstring(title="ComPort", prompt="Please select a COMPort:")
@@ -33,6 +36,7 @@ ser.isOpen()
 
 # initial read
 initial_read  = ser.readline().decode('utf-8')
+init_temp = int(initial_read)
 def data_gen():
     t = data_gen.t
     while True:
@@ -43,21 +47,27 @@ def data_gen():
             temp = int(ser.readline())
         #print(temp)
         t += 1
+        
         yield t, temp
 
 def expected(milli, Soak_temp, Soak_time, Reflow_temp):
     if milli < HEAT_TIME_PREHEAT:
-        return milli * Reflow_temp/HEAT_TIME_PREHEAT
+        return milli * (Soak_temp-init_temp)/HEAT_TIME_PREHEAT + init_temp
     TOTAL_TIME = HEAT_TIME_PREHEAT + Soak_time
     if milli < TOTAL_TIME:
         return Soak_temp
     TOTAL_TIME += HEAT_TIME_REFLOW
     if milli < TOTAL_TIME:
-        return (milli-TOTAL_TIME-HEAT_TIME_REFLOW)*(Soak_temp - Reflow_temp) / HEAT_TIME_REFLOW
-    TOTAL_TIME += Soak_time
+        return (milli-TOTAL_TIME+HEAT_TIME_REFLOW)*(Reflow_temp - Soak_temp) / HEAT_TIME_REFLOW + Soak_temp
+    TOTAL_TIME += Reflow_time
     if milli < TOTAL_TIME:
-        return Soak_temp
-    return ( milli - TOTAL_TIME ) * (Reflow_temp-25) / (COOLING_TIME)
+        return Reflow_temp
+    TOTAL_TIME += COOLING_TIME
+    if milli < TOTAL_TIME:
+        return ( milli - TOTAL_TIME + COOLING_TIME ) * (init_temp-Reflow_temp) / (COOLING_TIME) + Reflow_temp
+    return init_temp
+
+    
 
 def run(data):
     global ydata2
@@ -66,19 +76,37 @@ def run(data):
         xdata_raw.append(t)
         ydata_raw.append(y)
         yexp = expected(t, Soak_temp, Soak_time, Reflow_temp)
-        print(yexp)
         ydata2.append(yexp)
-        if t>xsize: # Scroll to the left.
+        if t>xsize:
             ax.set_xlim(t-xsize, t)
         xdata = xdata_raw[-xsize:]
         ydata = ydata_raw[-xsize:]
         ydata2 = ydata2[-xsize:]
         line.set_data(xdata, ydata)
         line2.set_data(xdata, ydata2)
+        if t >= HEAT_TIME_PREHEAT + Soak_time + HEAT_TIME_REFLOW + Reflow_time + COOLING_TIME + 5:
+            plt.pause(0.01)  # pause for a brief moment to update the chart
+            plt.close(fig)  # close the chart window
+            return None
     return line, line2
 
 
+
 def on_close_figure(event):
+    print('Closed Figure!')
+    max_over = 0
+    time_over = 0
+    max_under = 0
+    time_under = 0
+    for i in range(HEAT_TIME_PREHEAT + Soak_time + HEAT_TIME_REFLOW + Reflow_time + COOLING_TIME + 5):
+        if ydata_raw[i] - ydata2[i] > max_over:
+            max_over = ydata_raw[i] - ydata2[i]
+            time_over = i
+        if ydata2[i] - ydata_raw[i] > max_under:
+            max_under = ydata2[i] - ydata_raw[i]
+            time_under = i
+    print("Max over: " + str(max_over) + " at " + str(time_over/10)+ " seconds")
+    print("Max under: " + str(max_under) + " at " + str(time_under/10) + " seconds")
     sys.exit(0)
 
 Soak_temp = int(simpledialog.askstring(title="SoakTemp", prompt="Please enter the Soak Temperature:"))
