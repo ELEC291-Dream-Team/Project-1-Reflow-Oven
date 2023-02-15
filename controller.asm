@@ -32,6 +32,24 @@ PWM_PERIOD equ 200 ; is 1 byte
 PID_PERIOD equ 20 ; 1 byte
 DEGREEC    equ 0xaa
 
+; presets
+SOAKTEMP_A   equ 0x0069
+SOAKTIME_A   equ 0x0420
+REFLOWTEMP_A equ 0x0069
+REFLOWTIME_A equ 0x0420
+SOAKTEMP_B   equ 0x0069
+SOAKTIME_B   equ 0x0420
+REFLOWTEMP_B equ 0x0069
+REFLOWTIME_B equ 0x0420
+SOAKTEMP_C   equ 0x0069
+SOAKTIME_C   equ 0x0420
+REFLOWTEMP_C equ 0x0069
+REFLOWTIME_C equ 0x0420
+SOAKTEMP_D   equ 0x0069
+SOAKTIME_D   equ 0x0420
+REFLOWTEMP_D equ 0x0069
+REFLOWTIME_D equ 0x0420
+
 ; io pins
 LEFT      equ P2.7
 RIGHT     equ P2.6
@@ -126,11 +144,6 @@ bseg
     ToBePlayedDegreeC: dbit 1
 
 cseg
-; preset variables
-    Preset_A: db 0x01, db 0x50, db 0x00, db 0x60, db 0x02, db 0x50, db 0x00, db 0x30
-    Preset_B: db 0x01, db 0x00, db 0x00, db 0x60, db 0x02, db 0x50, db 0x00, db 0x30
-    Preset_C: db 0x01, db 0x50, db 0x00, db 0x60, db 0x02, db 0x00, db 0x00, db 0x30
-    Preset_D: db 0x01, db 0x00, db 0x00, db 0x60, db 0x02, db 0x00, db 0x00, db 0x30
 ;                      		1234567890123456
 Start_display_1:   		db '   RIZZOVEN69   ', 0
 Start_display_2:   		db '  Press  Start  ', 0
@@ -640,17 +653,6 @@ Save_Configuration:
     pop IE
 ret
 
-loadPreset mac
-    mov SoakTempBCD+0, %0+0
-    mov SoakTempBCD+1, %0+1
-    mov SoakTimeBCD+0, %0+2
-    mov SoakTimeBCD+1, %0+3
-    mov ReflowTempBCD+0, %0+4
-    mov ReflowTempBCD+1, %0+5
-    mov ReflowTimeBCD+0, %0+6
-    mov ReflowTimeBCD+1, %0+7 
-endmac
-
 readByte mac
 	clr a
 	movc a, @a+dptr
@@ -977,6 +979,11 @@ start:
     ljmp startLoop
 ; end of start state
 
+mov2BytesConstant mac
+    mov %0+1, #high(%1)
+    mov %0+0, #low(%1)
+endmac
+
 selectProfile:
     ; display select message
     WriteCommand(#0x0e) ; show cursor, no blink
@@ -987,7 +994,12 @@ selectProfile:
 
     select_A:
         Set_Cursor(2, 2)
-        loadPreset(Preset_A)
+        ; loadPreset(Preset_A)
+        mov2BytesConstant(SoakTempBCD, SOAKTEMP_A)
+        mov2BytesConstant(SoakTimeBCD, SOAKTIME_A)
+        mov2BytesConstant(ReflowTempBCD, REFLOWTEMP_A)
+        mov2BytesConstant(ReflowTimeBCD, REFLOWTIME_A)
+
         ifPressedJumpTo(LEFT, start, 1)
         ifPressedJumpTo(RIGHT, select_B, 1)
         ifPressedJumpTo(STARTSTOP, displayPreset, 1)
@@ -995,7 +1007,7 @@ selectProfile:
 
     select_B:
         Set_Cursor(2, 4)
-        loadPreset(Preset_B)
+        ; loadPreset(Preset_B)
         ifPressedJumpTo(LEFT, select_A, 1)
         ifPressedJumpTo(RIGHT, select_C, 1)
         ifPressedJumpTo(STARTSTOP, displayPreset, 2)
@@ -1003,7 +1015,7 @@ selectProfile:
 
     select_C:
         Set_Cursor(2, 6)
-        loadPreset(Preset_C)
+        ; loadPreset(Preset_C)
         ifPressedJumpTo(LEFT, select_B, 1)
         ifPressedJumpTo(RIGHT, select_D, 1)
         ifPressedJumpTo(STARTSTOP, displayPreset, 3)
@@ -1011,7 +1023,7 @@ selectProfile:
     
     select_D:
         Set_Cursor(2, 8)
-        loadPreset(Preset_D)
+        ; loadPreset(Preset_D)
         ifPressedJumpTo(LEFT, select_C, 1)
         ifPressedJumpTo(RIGHT, select_CUSTOM, 1)
         ifPressedJumpTo(STARTSTOP, displayPreset, 4)
@@ -1020,20 +1032,20 @@ selectProfile:
     select_CUSTOM:
         Set_Cursor(2, 10)
         ifPressedJumpTo(LEFT, select_D, 1)
-        ifPressedJumpTo(RIGHT, adjustParameters, 1)
+        ; ifPressedJumpTo(RIGHT, adjustParameters, 1)
         ifPressedJumpTo(STARTSTOP, adjustParameters, 1)
     ljmp select_CUSTOM
 
     displayPreset:
         WriteCommand(#0x0c) ; hide cursor, no blink
         lcall updateDisplayParameters
+        displayPresetLoop:
         ifPressedJumpTo(STARTSTOP, ready, 1)
         ifPressedJumpTo(LEFT, ready, 1)
         ifPressedJumpTo(RIGHT, ready, 1)
         ifPressedJumpTo(UP, ready, 1)
         ifPressedJumpTo(DOWN, ready, 1)
-    ljmp displayPreset
-
+    ljmp displayPresetLoop
 
 adjustParameters:
     ; update display
