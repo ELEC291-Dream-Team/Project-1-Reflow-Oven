@@ -1566,6 +1566,8 @@ RampToSoak:
         clr EA
         Load_x(0)
         mov2Bytes(x, OvenTemp)
+        Load_y(10)
+        lcall add32
         Load_y(0)
         mov2Bytes(y, SoakTempHex)
         lcall x_gt_y
@@ -1650,6 +1652,8 @@ RampToReflow:
         clr EA
         Load_x(0)
         mov2Bytes(x, OvenTemp)
+        Load_y(10)
+        lcall add32
         Load_y(0)
         mov2Bytes(y, ReflowTempHex)
         lcall x_gt_y
