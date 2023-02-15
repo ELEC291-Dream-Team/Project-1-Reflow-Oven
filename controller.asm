@@ -151,7 +151,7 @@ Select_display_1:       db ' Select Profile ', 0
 Select_display_2:   	db ' A B C D CUSTOM ', 0
 Parameter_display_1:   	db 'Soak   xxxC xxxs', 0
 Parameter_display_2:   	db 'Reflow xxxC xxxs', 0
-Ready_display_1:        db '     Ready      ', 0
+Ready_display_1:        db '     ready      ', 0
 Ready_display_2:        db '  Press Start   ', 0
 R2Soak_display_1:       db '  Ramp to Soak  ', 0
 R2Soak_display_2:       db '  xxxC    xxxs  ', 0
@@ -672,33 +672,37 @@ read2Bytes mac
 Endmac
 
 Load_Configuration:
+    push IE
+    clr EA
 	mov dptr, #0x7f88 ; First key value location.
 	readByte(R0) ; 0x7f84 should contain 0x55
 	cjne R0, #0x55, Load_Defaults
 	readByte(R0) ; 0x7f85 should contain 0xAA
 	cjne R0, #0xAA, Load_Defaults
-	; Keys are good.  Get stored values.
-	mov dptr, #0x7f80
-	read2Bytes(SoakTempBCD) ; 0x7f80
-	read2Bytes(SoakTimeBCD) ; 0x7f82
-	read2Bytes(ReflowTempBCD) ; 0x7f84
-	read2Bytes(ReflowTimeBCD) ; 0x7f86
+	    ; Keys are good.  Get stored values.
+	    mov dptr, #0x7f80
+	    read2Bytes(SoakTempBCD) ; 0x7f80
+	    read2Bytes(SoakTimeBCD) ; 0x7f82
+	    read2Bytes(ReflowTempBCD) ; 0x7f84
+	    read2Bytes(ReflowTimeBCD) ; 0x7f86
+        pop IE
     ret
     Load_Defaults: ; Load defaults if 'keys' are incorrect
-	mov SoakTempBCD+1, #0x01
-	mov SoakTempBCD+0, #0x50
-	mov SoakTimeBCD+1, #0x00
-	mov SoakTimeBCD+0, #0x45
-	mov ReflowTempBCD+1, #0x02
-	mov ReflowTempBCD+0, #0x25
-	mov ReflowTimeBCD+1, #0x00
-	mov ReflowTimeBCD+0, #0x30
+	    mov SoakTempBCD+1, #0x01
+	    mov SoakTempBCD+0, #0x50
+	    mov SoakTimeBCD+1, #0x00
+	    mov SoakTimeBCD+0, #0x45
+	    mov ReflowTempBCD+1, #0x02
+	    mov ReflowTempBCD+0, #0x25
+	    mov ReflowTimeBCD+1, #0x00
+	    mov ReflowTimeBCD+0, #0x30
+    pop IE
 ret
 
 updateDisplayParameters:
-    jb ParametersUpdated, _clearUpdated ; if !ParametersUpdated skip print
+    jb ParametersUpdated, ?updateDisplayParameters ; if !ParametersUpdated skip print
     ljmp updateDisplayParametersDone
-    _clearUpdated:
+    ?updateDisplayParameters:
         clr ParametersUpdated
         ; Display Soak Temp
         Set_Cursor(1,8)
@@ -758,8 +762,8 @@ setup:
     lcall Timer2_Init
     Wait_Milli_Seconds(#10)
     lcall InitSPI
-    Wait_Milli_Seconds(#10)
-    lcall Load_Configuration ; Update parameters with flash memory
+    ; Wait_Milli_Seconds(#10)
+    ; lcall Load_Configuration ; Update parameters with flash memory
     Wait_Milli_Seconds(#10)
     lcall InitSerialPort
 
@@ -993,67 +997,79 @@ selectProfile:
     Send_Constant_String(#Select_display_2)
 
     select_A:
-        Set_Cursor(2, 2)
-        ; loadPreset(Preset_A)
         mov2BytesConstant(SoakTempBCD, SOAKTEMP_A)
         mov2BytesConstant(SoakTimeBCD, SOAKTIME_A)
         mov2BytesConstant(ReflowTempBCD, REFLOWTEMP_A)
         mov2BytesConstant(ReflowTimeBCD, REFLOWTIME_A)
-
-        ifPressedJumpTo(LEFT, start, 1)
-        ifPressedJumpTo(RIGHT, select_B, 1)
-        ifPressedJumpTo(STARTSTOP, displayPreset, 1)
-    ljmp select_A
+        Set_Cursor(2, 2)
+        selectALoop:
+            ifPressedJumpTo(LEFT, start, 1)
+            ifPressedJumpTo(RIGHT, select_B, 1)
+            ifPressedJumpTo(STARTSTOP, displayPreset, 1)
+        ljmp selectALoop
 
     select_B:
+        mov2BytesConstant(SoakTempBCD, SOAKTEMP_B)
+        mov2BytesConstant(SoakTimeBCD, SOAKTIME_B)
+        mov2BytesConstant(ReflowTempBCD, REFLOWTEMP_B)
+        mov2BytesConstant(ReflowTimeBCD, REFLOWTIME_B)
         Set_Cursor(2, 4)
-        ; loadPreset(Preset_B)
-        ifPressedJumpTo(LEFT, select_A, 1)
-        ifPressedJumpTo(RIGHT, select_C, 1)
-        ifPressedJumpTo(STARTSTOP, displayPreset, 2)
-    ljmp select_B
+        selectBLoop:
+            ifPressedJumpTo(LEFT, select_A, 1)
+            ifPressedJumpTo(RIGHT, select_C, 1)
+            ifPressedJumpTo(STARTSTOP, displayPreset, 2)
+        ljmp selectBLoop
 
     select_C:
+        mov2BytesConstant(SoakTempBCD, SOAKTEMP_C)
+        mov2BytesConstant(SoakTimeBCD, SOAKTIME_C)
+        mov2BytesConstant(ReflowTempBCD, REFLOWTEMP_C)
+        mov2BytesConstant(ReflowTimeBCD, REFLOWTIME_C)
         Set_Cursor(2, 6)
-        ; loadPreset(Preset_C)
-        ifPressedJumpTo(LEFT, select_B, 1)
-        ifPressedJumpTo(RIGHT, select_D, 1)
-        ifPressedJumpTo(STARTSTOP, displayPreset, 3)
-    ljmp select_C
+        selectCLoop:
+            ifPressedJumpTo(LEFT, select_B, 1)
+            ifPressedJumpTo(RIGHT, select_D, 1)
+            ifPressedJumpTo(STARTSTOP, displayPreset, 3)
+        ljmp selectCLoop
     
     select_D:
+        mov2BytesConstant(SoakTempBCD, SOAKTEMP_D)
+        mov2BytesConstant(SoakTimeBCD, SOAKTIME_D)
+        mov2BytesConstant(ReflowTempBCD, REFLOWTEMP_D)
+        mov2BytesConstant(ReflowTimeBCD, REFLOWTIME_D)
+        selectDLoop:
         Set_Cursor(2, 8)
-        ; loadPreset(Preset_D)
-        ifPressedJumpTo(LEFT, select_C, 1)
-        ifPressedJumpTo(RIGHT, select_CUSTOM, 1)
-        ifPressedJumpTo(STARTSTOP, displayPreset, 4)
-    ljmp select_D
+            ifPressedJumpTo(LEFT, select_C, 1)
+            ifPressedJumpTo(RIGHT, selectCustom, 1)
+            ifPressedJumpTo(STARTSTOP, displayPreset, 4)
+        ljmp selectDLoop
     
-    select_CUSTOM:
+    selectCustom:
         Set_Cursor(2, 10)
-        ifPressedJumpTo(LEFT, select_D, 1)
-        ; ifPressedJumpTo(RIGHT, adjustParameters, 1)
-        ifPressedJumpTo(STARTSTOP, adjustParameters, 1)
-    ljmp select_CUSTOM
+        selectCustomLoop:
+            ifPressedJumpTo(LEFT, select_D, 1)
+            ; ifPressedJumpTo(RIGHT, adjustParameters, 1)
+            ifPressedJumpTo(STARTSTOP, adjustParameters, 1)
+        ljmp selectCustomLoop
 
     displayPreset:
+        Set_Cursor(1, 1)
+        Send_Constant_String(#Parameter_display_1)
+        Set_cursor(2, 1)
+        Send_Constant_String(#Parameter_display_2)
         WriteCommand(#0x0c) ; hide cursor, no blink
-        lcall updateDisplayParameters
+        lcall ?updateDisplayParameters
         displayPresetLoop:
-        ifPressedJumpTo(STARTSTOP, ready, 1)
-        ifPressedJumpTo(LEFT, ready, 1)
-        ifPressedJumpTo(RIGHT, ready, 1)
-        ifPressedJumpTo(UP, ready, 1)
-        ifPressedJumpTo(DOWN, ready, 1)
-    ljmp displayPresetLoop
+            ifPressedJumpTo(LEFT, selectProfile, 1)
+            ifPressedJumpTo(STARTSTOP, readyPreset, 1)
+        ljmp displayPresetLoop
 
 adjustParameters:
-    ; update display
-    ; show cursor
     Set_Cursor(1, 1)
     Send_Constant_String(#Parameter_display_1)
     Set_cursor(2, 1)
     Send_Constant_String(#Parameter_display_2)
+    lcall Load_Configuration
 
     WriteCommand(#0x0e) ; show cursor, no blink
 
@@ -1064,7 +1080,7 @@ adjustParameters:
 	; ----------------------------------------------;
     adjustSoakTemp100:
         Set_Cursor(1,8)
-        ifPressedJumpTo(LEFT, select_CUSTOM, 1)
+        ifPressedJumpTo(LEFT, selectProfile, 2)
         ifPressedJumpTo(RIGHT, adjustSoakTemp010, 1)
         ifNotPressedJumpTo(UP, _adjustSoakTemp100a)
             ; increment 100's of Soak Temp
@@ -1404,7 +1420,7 @@ adjustParametersEnd:
     adjustReflowTime001:
         Set_Cursor(2,15)
         ifPressedJumpTo(LEFT, adjustReflowTime010, 1)
-        ifPressedJumpTo(RIGHT, ready, 2)
+        ifPressedJumpTo(RIGHT, readyCustom, 2)
         ifNotPressedJumpTo(UP, _adjustReflowTime001a)
             ; increment 1's of Reflow Time
             mov a, ReflowTimeBCD+0
@@ -1436,8 +1452,8 @@ adjustParametersEnd:
     ljmp adjustReflowTime001
 ; end of adjustParameters state
 
-ready:
-    ; display ready message
+readyPreset:
+    ; display readyCustom message
     Set_Cursor(1, 1)
     Send_Constant_String(#Ready_display_1)
     Set_cursor(2, 1)
@@ -1472,10 +1488,51 @@ ready:
     lcall bcd2hex
     mov2Bytes(ReflowTimeHex, x)
 
-    readyLoop:
-        ifPressedJumpTo(LEFT, adjustParametersEnd, 1)
+    readyPresetLoop:
+        ifPressedJumpTo(LEFT, displayPreset, 1)
         ifPressedJumpTo(STARTSTOP, RampToSoak, 1)
-    ljmp readyLoop
+    ljmp readyPresetLoop
+
+readyCustom:
+    ; display readyCustom message
+    Set_Cursor(1, 1)
+    Send_Constant_String(#Ready_display_1)
+    Set_cursor(2, 1)
+    Send_Constant_String(#Ready_display_2)
+
+    WriteCommand(#0x0c) ; hide cursor, no blink
+
+    ; Update the flash memory
+    lcall Save_Configuration
+
+    ;-------------------------------------------------;
+    ;--------- Update Parameter Hex values -----------;
+    ;-------------------------------------------------;
+
+    Load_x(0) ; clear the bcd
+    lcall hex2bcd
+    
+    ; Update Soak Temp Hex
+    mov2Bytes(bcd, SoakTempBCD)
+    lcall bcd2hex
+    mov2Bytes(SoakTempHex, x)
+    ; Update Soak Time Hex
+    mov2Bytes(bcd, SoakTimeBCD)
+    lcall bcd2hex
+    mov2Bytes(SoakTimeHex, x)
+    ; Update Reflow Temp Hex
+    mov2Bytes(bcd, ReflowTempBCD)
+    lcall bcd2hex
+    mov2Bytes(ReflowTempHex, x)
+    ; Update Reflow Time Hex
+    mov2Bytes(bcd, ReflowTimeBCD)
+    lcall bcd2hex
+    mov2Bytes(ReflowTimeHex, x)
+
+    readyCustomLoop:
+        ifPressedJumpTo(LEFT, adjustParametersEnd, 1)
+        ifPressedJumpTo(STARTSTOP, RampToSoak, 2)
+    ljmp readyCustomLoop
 
 ;-------------------------------------------;
 ;---------------- Oven FSM -----------------;
