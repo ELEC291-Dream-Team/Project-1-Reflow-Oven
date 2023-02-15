@@ -105,11 +105,6 @@ dseg at 0x30
 ; PWM variables
     PWMDutyCycle:  ds 1
     PWMCompare:    ds 1
-; preset variables
-    Preset_A: 0x0150, 0x0060, 0x0250, 0x0030 
-    Preset_B: 0x0100, 0x0060, 0x0250, 0x0030 
-    Preset_C: 0x0150, 0x0060, 0x0200, 0x0030 
-    Preset_D: 0x0100, 0x0060, 0x0200, 0x0030 
 
 bseg
 ; math32
@@ -131,6 +126,11 @@ bseg
     ToBePlayedDegreeC: dbit 1
 
 cseg
+; preset variables
+    Preset_A: db 0x01, db 0x50, db 0x00, db 0x60, db 0x02, db 0x50, db 0x00, db 0x30
+    Preset_B: db 0x01, db 0x00, db 0x00, db 0x60, db 0x02, db 0x50, db 0x00, db 0x30
+    Preset_C: db 0x01, db 0x50, db 0x00, db 0x60, db 0x02, db 0x00, db 0x00, db 0x30
+    Preset_D: db 0x01, db 0x00, db 0x00, db 0x60, db 0x02, db 0x00, db 0x00, db 0x30
 ;                      		1234567890123456
 Start_display_1:   		db '   RIZZOVEN69   ', 0
 Start_display_2:   		db '  Press  Start  ', 0
@@ -998,7 +998,7 @@ selectProfile:
         loadPreset(Preset_B)
         ifPressedJumpTo(LEFT, select_A, 1)
         ifPressedJumpTo(RIGHT, select_C, 1)
-        ifPressedJumpTo(STARTSTOP, displayPreset, 1)
+        ifPressedJumpTo(STARTSTOP, displayPreset, 2)
     ljmp select_B
 
     select_C:
@@ -1006,7 +1006,7 @@ selectProfile:
         loadPreset(Preset_C)
         ifPressedJumpTo(LEFT, select_B, 1)
         ifPressedJumpTo(RIGHT, select_D, 1)
-        ifPressedJumpTo(STARTSTOP, displayPreset, 1)
+        ifPressedJumpTo(STARTSTOP, displayPreset, 3)
     ljmp select_C
     
     select_D:
@@ -1014,7 +1014,7 @@ selectProfile:
         loadPreset(Preset_D)
         ifPressedJumpTo(LEFT, select_C, 1)
         ifPressedJumpTo(RIGHT, select_CUSTOM, 1)
-        ifPressedJumpTo(STARTSTOP, displayPreset, 1)
+        ifPressedJumpTo(STARTSTOP, displayPreset, 4)
     ljmp select_D
     
     select_CUSTOM:
@@ -1392,7 +1392,7 @@ adjustParametersEnd:
     adjustReflowTime001:
         Set_Cursor(2,15)
         ifPressedJumpTo(LEFT, adjustReflowTime010, 1)
-        ifPressedJumpTo(RIGHT, ready, 1)
+        ifPressedJumpTo(RIGHT, ready, 2)
         ifNotPressedJumpTo(UP, _adjustReflowTime001a)
             ; increment 1's of Reflow Time
             mov a, ReflowTimeBCD+0
