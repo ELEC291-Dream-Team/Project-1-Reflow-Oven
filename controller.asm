@@ -93,12 +93,12 @@ dseg at 0x30
     ReflowTempHex: ds 2
     ReflowTimeHex: ds 2
 ; preset profile variables
-    100Temp:       ds 1
-    150Temp:       ds 1
-    200Temp:       ds 1
-    250Temp:       ds 1
-    30Time:        ds 1
-    60Time:        ds 1
+    ; 100Temp:       ds 1
+    ; 150Temp:       ds 1
+    ; 200Temp:       ds 1
+    ; 250Temp:       ds 1
+    ; 30Time:        ds 1
+    ; 60Time:        ds 1
 ; flash variables
     w:             ds 3
     FlashReadAddr: ds 3
@@ -404,9 +404,10 @@ Timer2_ISR:
     mov a, Counter100ms
 	cjne a, #100, Counter100msnotOverflow 
 	    mov Counter100ms, #0x00
-        ; lcall ReadTemp
         setb Flag100ms
         SerialSend3BCD(OvenTempBCD)
+        jb RunTimeFlag, Counter1000msnotOverflow
+            lcall ReadTemp
     Counter100msnotOverflow:
 
     ; 5 seconds timer
@@ -738,12 +739,12 @@ setup:
     mov P4M0, #0
     mov P4M1, #0
 
-    mov 100Temp, #100
-    mov 150Temp, #150
-    mov 200Temp, #200
-    mov 250Temp, #250
-    mov 30Time, #30
-    mov 60Time, #60
+    ; mov 100Temp, #100
+    ; mov 150Temp, #150
+    ; mov 200Temp, #200
+    ; mov 250Temp, #250
+    ; mov 30Time, #30
+    ; mov 60Time, #60
     
     Wait_Milli_Seconds(#10)
     lcall LCD_4BIT
@@ -785,6 +786,8 @@ setup:
 
     Load_x(0)
     lcall hex2bcd
+
+    lcall ReadTemp
 
     ; custom degree C character
     ; WriteCommand(#0x40)
@@ -897,8 +900,8 @@ playSound:
 	    mov FlashReadAddr+1, #0xAE
 	    mov FlashReadAddr+0, #0xAA
 	    mov w+2, #0x00
-	    mov w+1, #0x2b
-	    mov w+0, #0x11
+	    mov w+1, #0x81
+	    mov w+0, #0x33
         ljmp swFinish
     swFinish:
     setb SpeakerIsBusy
@@ -984,8 +987,8 @@ select:
     Set_Cursor(2,1)
 
     selectLoop:
-        ifPressedJumpTo(STARTSTOP, adjustParameters, 1)
-        ifPressedJumpTo(RIGHT, adjustParameters, 1)
+        ifPressedJumpTo(STARTSTOP, adjustParameters, 2)
+        ifPressedJumpTo(RIGHT, adjustParameters, 2)
     ljmp selectLoop
 
 adjustParameters:
@@ -1429,6 +1432,7 @@ RampToSoak:
     Send_Constant_String(#R2Soak_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
 
+    mov WaitCountBCD+0, #0x60 
     mov Counter5s, #0x00
     zero2Bytes(RunTimeBCD)
     zero2Bytes(Counter1000ms)
@@ -1436,8 +1440,8 @@ RampToSoak:
 
     ; 100% power
     clr MaintainTargetTemp
-    clr WaitFlag
     mov PWMDutyCycle, #PWM_PERIOD
+    setb WaitFlag
     setb Flag100ms
 
     RampToSoakLoop:
@@ -1456,6 +1460,20 @@ RampToSoak:
             setb EA
             ljmp Soak
         soakTempNotReached:
+        setb EA
+
+        clr EA
+        mov a, WaitCountBCD+0
+        jnz noThermalRunaway
+            Load_x(0)
+            mov2Bytes(x, OvenTemp)
+            Load_y(50)
+            lcall x_lt_y
+
+            jnb mf, noThermalRunaway
+                setb EA
+                ljmp Cancelled
+        noThermalRunaway:
         setb EA
 
         lcall soundHandler
@@ -1589,7 +1607,7 @@ Cooling:
         lcall x_lt_y
         jnb mf, ovenStillHot
             setb EA
-            ljmp start
+            ljmp Done
         ovenStillHot:
         setb EA
 
@@ -1642,8 +1660,8 @@ Cancelled:
         Display_BCD(WaitCountBCD) ; display WaitCountBCD
         mov a, WaitCountBCD
         cjne a, #0x99, CancelledLoop ; wait 15 sec
-        clr WaitFlag
-        ljmp start
+            clr WaitFlag
+            ljmp start
     ljmp CancelledLoop
 
 debug:
