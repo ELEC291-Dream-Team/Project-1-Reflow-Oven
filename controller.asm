@@ -92,13 +92,6 @@ dseg at 0x30
     SoakTimeHex:   ds 2
     ReflowTempHex: ds 2
     ReflowTimeHex: ds 2
-; preset profile variables
-    100Temp:       ds 1
-    150Temp:       ds 1
-    200Temp:       ds 1
-    250Temp:       ds 1
-    30Time:        ds 1
-    60Time:        ds 1
 ; flash variables
     w:             ds 3
     FlashReadAddr: ds 3
@@ -112,6 +105,11 @@ dseg at 0x30
 ; PWM variables
     PWMDutyCycle:  ds 1
     PWMCompare:    ds 1
+; preset variables
+    Preset_A: 0x0150, 0x0060, 0x0250, 0x0030 
+    Preset_B: 0x0100, 0x0060, 0x0250, 0x0030 
+    Preset_C: 0x0150, 0x0060, 0x0200, 0x0030 
+    Preset_D: 0x0100, 0x0060, 0x0200, 0x0030 
 
 bseg
 ; math32
@@ -138,8 +136,6 @@ Start_display_1:   		db '   RIZZOVEN69   ', 0
 Start_display_2:   		db '  Press  Start  ', 0
 Select_display_1:       db ' Select Profile ', 0
 Select_display_2:   	db ' A B C D CUSTOM ', 0
-A_display_1:            db 'Soak   150C 60s ', 0
-A_display_2:   	        db 'Reflow 250C 30s ', 0
 Parameter_display_1:   	db 'Soak   xxxC xxxs', 0
 Parameter_display_2:   	db 'Reflow xxxC xxxs', 0
 Ready_display_1:        db '     Ready      ', 0
@@ -643,6 +639,17 @@ Save_Configuration:
     pop IE
 ret
 
+loadPreset mac
+    mov SoakTempBCD+0, %0+0
+    mov SoakTempBCD+1, %0+1
+    mov SoakTimeBCD+0, %0+2
+    mov SoakTimeBCD+1, %0+3
+    mov ReflowTempBCD+0, %0+4
+    mov ReflowTempBCD+1, %0+5
+    mov ReflowTimeBCD+0, %0+6
+    mov ReflowTimeBCD+1, %0+7 
+endmac
+
 readByte mac
 	clr a
 	movc a, @a+dptr
@@ -738,13 +745,6 @@ setup:
     mov P4M0, #0
     mov P4M1, #0
 
-    mov 100Temp, #100
-    mov 150Temp, #150
-    mov 200Temp, #200
-    mov 250Temp, #250
-    mov 30Time, #30
-    mov 60Time, #60
-    
     Wait_Milli_Seconds(#10)
     lcall LCD_4BIT
     Wait_Milli_Seconds(#10)
@@ -969,24 +969,68 @@ start:
     Send_Constant_String(#Start_display_2)
 
     startLoop:
-        ifPressedJumpTo(STARTSTOP, adjustParameters, 1)
-        ifPressedJumpTo(RIGHT, adjustParameters, 1)
+        ifPressedJumpTo(STARTSTOP, selectProfile, 1)
+        ifPressedJumpTo(RIGHT, selectProfile, 1)
     ljmp startLoop
 ; end of start state
 
-select:
+selectProfile:
     ; display select message
     WriteCommand(#0x0e) ; show cursor, no blink
     Set_Cursor(1, 1)
     Send_Constant_String(#Select_display_1)
     Set_cursor(2, 1)
     Send_Constant_String(#Select_display_2)
-    Set_Cursor(2,1)
 
-    selectLoop:
-        ifPressedJumpTo(STARTSTOP, adjustParameters, 1)
+    select_A:
+        Set_Cursor(2, 2)
+        loadPreset(Preset_A)
+        ifPressedJumpTo(LEFT, start, 1)
+        ifPressedJumpTo(RIGHT, select_B, 1)
+        ifPressedJumpTo(STARTSTOP, displayPreset, 1)
+    ljmp select_A
+
+    select_B:
+        Set_Cursor(2, 4)
+        loadPreset(Preset_B)
+        ifPressedJumpTo(LEFT, select_A, 1)
+        ifPressedJumpTo(RIGHT, select_C, 1)
+        ifPressedJumpTo(STARTSTOP, displayPreset, 1)
+    ljmp select_B
+
+    select_C:
+        Set_Cursor(2, 6)
+        loadPreset(Preset_C)
+        ifPressedJumpTo(LEFT, select_B, 1)
+        ifPressedJumpTo(RIGHT, select_D, 1)
+        ifPressedJumpTo(STARTSTOP, displayPreset, 1)
+    ljmp select_C
+    
+    select_D:
+        Set_Cursor(2, 8)
+        loadPreset(Preset_D)
+        ifPressedJumpTo(LEFT, select_C, 1)
+        ifPressedJumpTo(RIGHT, select_CUSTOM, 1)
+        ifPressedJumpTo(STARTSTOP, displayPreset, 1)
+    ljmp select_D
+    
+    select_CUSTOM:
+        Set_Cursor(2, 10)
+        ifPressedJumpTo(LEFT, select_D, 1)
         ifPressedJumpTo(RIGHT, adjustParameters, 1)
-    ljmp selectLoop
+        ifPressedJumpTo(STARTSTOP, adjustParameters, 1)
+    ljmp select_CUSTOM
+
+    displayPreset:
+        WriteCommand(#0x0c) ; hide cursor, no blink
+        lcall updateDisplayParameters
+        ifPressedJumpTo(STARTSTOP, ready, 1)
+        ifPressedJumpTo(LEFT, ready, 1)
+        ifPressedJumpTo(RIGHT, ready, 1)
+        ifPressedJumpTo(UP, ready, 1)
+        ifPressedJumpTo(DOWN, ready, 1)
+    ljmp displayPreset
+
 
 adjustParameters:
     ; update display
@@ -1005,7 +1049,7 @@ adjustParameters:
 	; ----------------------------------------------;
     adjustSoakTemp100:
         Set_Cursor(1,8)
-        ifPressedJumpTo(LEFT, start, 1)
+        ifPressedJumpTo(LEFT, select_CUSTOM, 1)
         ifPressedJumpTo(RIGHT, adjustSoakTemp010, 1)
         ifNotPressedJumpTo(UP, _adjustSoakTemp100a)
             ; increment 100's of Soak Temp
