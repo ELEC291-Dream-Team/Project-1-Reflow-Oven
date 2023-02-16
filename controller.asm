@@ -1097,6 +1097,17 @@ start:
     Set_cursor(2, 1)
     Send_Constant_String(#Start_display_2)
 
+    clr ToBePlayed100s
+    clr ToBePlayed10s
+    clr ToBePlayed1s
+    clr ToBePlayedDegreeC
+    clr ToBePlayedStarting
+    clr ToBePlayedSoakStart
+    clr ToBePlayedSoakFinish
+    clr ToBePlayedReflowStart
+    clr ToBePlayedCooling
+    clr ToBePlayedSafe
+
     setb SoundIsPlaying
     setb ToBePlayedDenise
 
@@ -1686,11 +1697,15 @@ RampToSoak:
     setb WaitFlag
     setb Flag100ms
 
+    setb ToBePlayedStarting
+    setb SoundIsPlaying
+
     RampToSoakLoop:
         ifPressedJumpTo(STARTSTOP, Cancelled, 1) ; Cancel if stop button pressed
         
         lcall ReadTemp
         lcall updateDisplayReflow
+        lcall soundHandler
 
         clr EA
         Load_x(0)
@@ -1719,9 +1734,6 @@ RampToSoak:
                 ljmp Cancelled
         noThermalRunaway:
         setb EA
-
-        lcall soundHandler
-
     ljmp RampToSoakLoop
 
 Soak:
@@ -1741,11 +1753,15 @@ Soak:
     mov PWMDutyCycle, #0x00
     setb Flag100ms
 
+    setb ToBePlayedSoakStart
+    setb SoundIsPlaying
+
     SoakLoop:
         ifPressedJumpTo(STARTSTOP, Cancelled, 2) ; Cancel if stop button pressed
 
         lcall ReadTemp
         lcall updateDisplayReflow
+        lcall soundHandler
 
         mov a, WaitCountBCD+1
         jnz stillSoaking
@@ -1753,9 +1769,6 @@ Soak:
         jnz stillSoaking
             ljmp RampToReflow
         stillSoaking:
-        
-        lcall soundHandler
-
     ljmp SoakLoop
 
 RampToReflow:
@@ -1772,11 +1785,15 @@ RampToReflow:
     mov PWMDutyCycle, #PWM_PERIOD
     setb Flag100ms
 
+    setb ToBePlayedSoakFinish
+    setb SoundIsPlaying
+
     RampToReflowLoop:
         ifPressedJumpTo(STARTSTOP, Cancelled, 3) ; Cancel if stop button pressed
 
         lcall ReadTemp
         lcall updateDisplayReflow
+        lcall soundHandler
 
         clr EA
         Load_x(0)
@@ -1791,9 +1808,6 @@ RampToReflow:
             ljmp Reflow
         ReflowTempNotReached:
         setb EA
-        
-        lcall soundHandler
-
     ljmp RampToReflowLoop
 
 Reflow:
@@ -1813,11 +1827,15 @@ Reflow:
     mov PWMDutyCycle, #0x00
     setb Flag100ms
 
+    setb ToBePlayedReflowStart
+    setb SoundIsPlaying
+
     ReflowLoop:
         ifPressedJumpTo(STARTSTOP, Cancelled, 4) ; Cancel if stop button pressed
 
         lcall ReadTemp
         lcall updateDisplayReflow
+        lcall soundHandler
 
         mov a, WaitCountBCD+1
         jnz stillReflowing
@@ -1825,9 +1843,6 @@ Reflow:
         jnz stillReflowing
             ljmp Cooling
         stillReflowing:
-
-        lcall soundHandler
-
     ljmp ReflowLoop
 
 Cooling:
@@ -1842,9 +1857,13 @@ Cooling:
     mov PWMDutyCycle, #0x00
     setb Flag100ms
 
+    setb ToBePlayedCooling
+    setb SoundIsPlaying
+
     CoolingLoop:
         lcall ReadTemp
         lcall updateDisplayReflow
+        lcall soundHandler
 
         clr EA
         Load_y(60)
@@ -1856,9 +1875,6 @@ Cooling:
             ljmp Done
         ovenStillHot:
         setb EA
-
-        lcall soundHandler
-
     ljmp CoolingLoop
 
 Done:
@@ -1875,6 +1891,9 @@ Done:
     mov PWMDutyCycle, #0x00
     mov WaitCountBCD+0, #0x15
     setb WaitFlag
+
+    setb ToBePlayedSafe
+    setb SoundIsPlaying
 
     DoneLoop:
         ifPressedJumpTo(STARTSTOP, start, 1) ; Return to the menu if start button pressed
