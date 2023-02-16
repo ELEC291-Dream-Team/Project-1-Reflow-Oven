@@ -30,7 +30,15 @@ BRG_VAL       equ (0x100-(CLK/(16*BAUDRATE)))
 
 PWM_PERIOD equ 200 ; is 1 byte
 PID_PERIOD equ 20 ; 1 byte
-DEGREEC    equ 0xaa
+; sound label
+DEGREEC    equ 0xa1
+STARTING   equ 0xa2
+SOAKSTART  equ 0xa3
+SOAKFINISH equ 0xa4
+REFSTART   equ 0xa5
+COOLING    equ 0xa6
+SAFETT     equ 0xa7
+DENISE     equ 0xa8
 
 ; presets
 SOAKTEMP_A   equ 0x0100
@@ -134,14 +142,21 @@ bseg
     RunTimeFlag:        dbit 1 ; start runtimer flag
     MaintainTargetTemp: dbit 1
     FiveSecondsFlag:    dbit 1
-    Flag100ms: dbit 1
+    Flag100ms:          dbit 1
 ; sound
-    SoundIsPlaying:    dbit 1
-    SpeakerIsBusy:     dbit 1
-    ToBePlayed100s:    dbit 1
-    ToBePlayed10s:     dbit 1
-    ToBePlayed1s:      dbit 1
-    ToBePlayedDegreeC: dbit 1
+    SoundIsPlaying:        dbit 1
+    SpeakerIsBusy:         dbit 1
+    ToBePlayed100s:        dbit 1
+    ToBePlayed10s:         dbit 1
+    ToBePlayed1s:          dbit 1
+    ToBePlayedDegreeC:     dbit 1
+    ToBePlayedStarting:    dbit 1
+    ToBePlayedSoakStart:   dbit 1
+    ToBePlayedSoakFinish:  dbit 1
+    ToBePlayedReflowStart: dbit 1
+    ToBePlayedCooling:     dbit 1
+    ToBePlayedSafe:        dbit 1
+    ToBePlayedDenise:      dbit 1
 
 cseg
 ;                      		1234567890123456
@@ -816,99 +831,100 @@ playSound:
 	    mov FlashReadAddr+1, #0x00
 	    mov FlashReadAddr+0, #0x00
 	    mov w+2, #0x00
-	    mov w+1, #0x2b
-	    mov w+0, #0x11
+	    mov w+1, #0x38
+	    mov w+0, #0x54
         ljmp swFinish
     notZero:
     cjne a, #0x01, notOne
         mov FlashReadAddr+2, #0x00
-	    mov FlashReadAddr+1, #0x2B
-	    mov FlashReadAddr+0, #0x11
+	    mov FlashReadAddr+1, #0x38
+	    mov FlashReadAddr+0, #0xac
 	    mov w+2, #0x00
-	    mov w+1, #0x2b
-	    mov w+0, #0x11
+	    mov w+1, #0x26
+	    mov w+0, #0xd8
         ljmp swFinish
     notOne:
     cjne a, #0x02, notTwo
         mov FlashReadAddr+2, #0x00
-	    mov FlashReadAddr+1, #0x56
-	    mov FlashReadAddr+0, #0x22
+	    mov FlashReadAddr+1, #0x5f
+	    mov FlashReadAddr+0, #0xf3
 	    mov w+2, #0x00
-	    mov w+1, #0x2b
-	    mov w+0, #0x11
+	    mov w+1, #0x27
+	    mov w+0, #0x9f
         ljmp swFinish
     notTwo:
     cjne a, #0x03, notThree
         mov FlashReadAddr+2, #0x00
-	    mov FlashReadAddr+1, #0x81
-	    mov FlashReadAddr+0, #0x33
+	    mov FlashReadAddr+1, #0x87
+	    mov FlashReadAddr+0, #0xea
 	    mov w+2, #0x00
-	    mov w+1, #0x2b
-	    mov w+0, #0x11
+	    mov w+1, #0x31
+	    mov w+0, #0x9c
         ljmp swFinish
     notThree:
     cjne a, #0x04, notFour
         mov FlashReadAddr+2, #0x00
-	    mov FlashReadAddr+1, #0xAC
-	    mov FlashReadAddr+0, #0x44
+	    mov FlashReadAddr+1, #0xb9
+	    mov FlashReadAddr+0, #0xf5
 	    mov w+2, #0x00
-	    mov w+1, #0x2b
-	    mov w+0, #0x11
+	    mov w+1, #0x24
+	    mov w+0, #0xc7
         ljmp swFinish
     notFour:
     cjne a, #0x05, notFive
         mov FlashReadAddr+2, #0x00
-	    mov FlashReadAddr+1, #0xD7
-	    mov FlashReadAddr+0, #0x55
+	    mov FlashReadAddr+1, #0xde
+	    mov FlashReadAddr+0, #0xff
 	    mov w+2, #0x00
-	    mov w+1, #0x2b
-	    mov w+0, #0x11
+	    mov w+1, #0x39
+	    mov w+0, #0x05
         ljmp swFinish
     notFive:
     cjne a, #0x06, notSix
         mov FlashReadAddr+2, #0x01
-	    mov FlashReadAddr+1, #0x02
-	    mov FlashReadAddr+0, #0x66
+	    mov FlashReadAddr+1, #0x18
+	    mov FlashReadAddr+0, #0x88
 	    mov w+2, #0x00
-	    mov w+1, #0x2b
-	    mov w+0, #0x11
+	    mov w+1, #0x31
+	    mov w+0, #0x44
         ljmp swFinish
     notSix:
     cjne a, #0x07, notSeven
         mov FlashReadAddr+2, #0x01
-	    mov FlashReadAddr+1, #0x2D
-	    mov FlashReadAddr+0, #0x77
+	    mov FlashReadAddr+1, #0x4a
+	    mov FlashReadAddr+0, #0x7d
 	    mov w+2, #0x00
-	    mov w+1, #0x2b
-	    mov w+0, #0x11
+	    mov w+1, #0x2a
+	    mov w+0, #0x1e
         ljmp swFinish
     notSeven:
     cjne a, #0x08, notEight
         mov FlashReadAddr+2, #0x01
-	    mov FlashReadAddr+1, #0x58
-	    mov FlashReadAddr+0, #0x88
+	    mov FlashReadAddr+1, #0x74
+	    mov FlashReadAddr+0, #0xf4
 	    mov w+2, #0x00
-	    mov w+1, #0x2b
-	    mov w+0, #0x11
+	    mov w+1, #0x21
+	    mov w+0, #0xd9
         ljmp swFinish
     notEight:
     cjne a, #0x09, notNine
         mov FlashReadAddr+2, #0x01
-	    mov FlashReadAddr+1, #0x83
-	    mov FlashReadAddr+0, #0x99
+	    mov FlashReadAddr+1, #0x97
+	    mov FlashReadAddr+0, #0x52
 	    mov w+2, #0x00
-	    mov w+1, #0x2b
-	    mov w+0, #0x11
+	    mov w+1, #0x38
+	    mov w+0, #0x6a
         ljmp swFinish
     notNine:
     cjne a, #DEGREEC, swFinish
         mov FlashReadAddr+2, #0x01
-	    mov FlashReadAddr+1, #0xAE
-	    mov FlashReadAddr+0, #0xAA
+	    mov FlashReadAddr+1, #0xCF
+	    mov FlashReadAddr+0, #0xBD
 	    mov w+2, #0x00
-	    mov w+1, #0x81
-	    mov w+0, #0x33
+	    mov w+1, #0x62
+	    mov w+0, #0x47
         ljmp swFinish
+    
     swFinish:
     setb SpeakerIsBusy
     setb SPEAKER_E
