@@ -83,6 +83,11 @@ SPI_MISO equ P3.4
 CS_FLASH equ P3.5
 CS_ADC   equ P3.6
 
+; LED pins
+LED_R equ P2.0
+LED_Y equ P1.7
+LED_G equ P1.6
+
 ; Commands supported by the SPI flash memory according to the datasheet
 WRITE_ENABLE     EQU 0x06  ; Address:0 Dummy:0 Num:0
 WRITE_DISABLE    EQU 0x04  ; Address:0 Dummy:0 Num:0
@@ -789,6 +794,11 @@ setup:
     setb STARTSTOP
     setb SPEAKER_E
     setb OVEN
+
+    ; LED yellow
+    clr LED_R
+    setb LED_Y
+    clr LED_G
 
     mov PWMDutyCycle, #0x00
     
@@ -1684,6 +1694,11 @@ RampToSoak:
     Set_cursor(2, 1)
     Send_Constant_String(#R2Soak_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
+    
+    ; LED red
+    setb LED_R
+    clr LED_Y
+    clr LED_G
 
     mov WaitCountBCD+0, #0x60 
     mov Counter5s, #0x00
@@ -1851,6 +1866,11 @@ Cooling:
     Set_cursor(2, 1)
     Send_Constant_String(#Cooling_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
+    
+    ; LED yellow
+    clr LED_R
+    setb LED_Y
+    clr LED_G
 
     ; turn off oven
     clr MaintainTargetTemp
@@ -1884,6 +1904,11 @@ Done:
     Send_Constant_String(#Done_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
 
+    ; LED green
+    clr LED_R
+    clr LED_Y
+    setb LED_G
+
     ; safe to touch if currentTemp < 60
     clr RunTimeFlag
     clr MaintainTargetTemp
@@ -1911,6 +1936,11 @@ Cancelled:
     Set_cursor(2, 1)
     Send_Constant_String(#Cancelled_display_2)
     WriteCommand(#0x0c) ; hide cursor, no blink
+    
+    ; LED yellow
+    clr LED_R
+    setb LED_Y
+    clr LED_G
 
     clr RunTimeFlag
     clr MaintainTargetTemp
