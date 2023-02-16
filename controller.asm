@@ -36,7 +36,7 @@ STARTING   equ 0xa2
 SOAKSTART  equ 0xa3
 SOAKFINISH equ 0xa4
 REFSTART   equ 0xa5
-COOLING    equ 0xa6
+COOLINGL    equ 0xa6
 SAFETT     equ 0xa7
 DENISE     equ 0xa8
 
@@ -166,7 +166,7 @@ Select_display_1:       db ' Select Profile ', 0
 Select_display_2:   	db ' A B C D CUSTOM ', 0
 Parameter_display_1:   	db 'Soak   xxxC xxxs', 0
 Parameter_display_2:   	db 'Reflow xxxC xxxs', 0
-Ready_display_1:        db '     ready      ', 0
+Ready_display_1:        db '     Ready      ', 0
 Ready_display_2:        db '  Press Start   ', 0
 R2Soak_display_1:       db '  Ramp to Soak  ', 0
 R2Soak_display_2:       db '  xxxC    xxxs  ', 0
@@ -916,69 +916,76 @@ playSound:
 	    mov w+0, #0x6a
         ljmp swFinish
     notNine:
-    cjne a, #DEGREEC, starting_audio
+    cjne a, #DEGREEC, notDegreeC
         mov FlashReadAddr+2, #0x01
-	    mov FlashReadAddr+1, #0xAE
-	    mov FlashReadAddr+0, #0xAA
-	    mov w+2, #0x00
-	    mov w+1, #0x81
-	    mov w+0, #0x33
-        ljmp swFinish
-    starting_audio:
-    cjne a, #DEGREEC, starting_audio
-        mov FlashReadAddr+2, #0x01
-	    mov FlashReadAddr+1, #0xAE
-	    mov FlashReadAddr+0, #0xAA
-	    mov w+2, #0x00
-	    mov w+1, #0x81
-	    mov w+0, #0x33
-        ljmp swFinish
-    soak_start_audio:
-    cjne a, #DEGREEC, soak_finish_audio
-        mov FlashReadAddr+2, #0x01
-	    mov FlashReadAddr+1, #0xAE
-	    mov FlashReadAddr+0, #0xAA
-	    mov w+2, #0x00
-	    mov w+1, #0x81
-	    mov w+0, #0x33
-        ljmp swFinish
-    soak_finish_audio:
-    cjne a, #DEGREEC, reflow_start_audio
-        mov FlashReadAddr+2, #0x01
-	    mov FlashReadAddr+1, #0xAE
-	    mov FlashReadAddr+0, #0xAA
-	    mov w+2, #0x00
-	    mov w+1, #0x81
-	    mov w+0, #0x33
-        ljmp swFinish
-    reflow_start_audio:
-    cjne a, #DEGREEC, cooling_audio
-        mov FlashReadAddr+2, #0x01
-	    mov FlashReadAddr+1, #0xAE
-	    mov FlashReadAddr+0, #0xAA
-	    mov w+2, #0x00
-	    mov w+1, #0x81
-	    mov w+0, #0x33
-        ljmp swFinish
-    cooling_audio:
-    cjne a, #DEGREEC, safe_to_touch_audio
-        mov FlashReadAddr+2, #0x01
-	    mov FlashReadAddr+1, #0xAE
-	    mov FlashReadAddr+0, #0xAA
-	    mov w+2, #0x00
-	    mov w+1, #0x81
-	    mov w+0, #0x33
-        ljmp swFinish
-    safe_to_touch_audio:
-    cjne a, #DEGREEC, safe_to_touch_audio
-        mov FlashReadAddr+2, #0x01
-	    mov FlashReadAddr+1, #0xCF
-	    mov FlashReadAddr+0, #0xBD
+	    mov FlashReadAddr+1, #0xcf
+	    mov FlashReadAddr+0, #0xbd
 	    mov w+2, #0x00
 	    mov w+1, #0x62
 	    mov w+0, #0x47
         ljmp swFinish
-    
+    notDegreeC:
+    cjne a, #STARTING, notStarting
+        mov FlashReadAddr+2, #0x02
+	    mov FlashReadAddr+1, #0x31
+	    mov FlashReadAddr+0, #0xee
+	    mov w+2, #0x00
+	    mov w+1, #0x3c
+	    mov w+0, #0x61
+        ljmp swFinish
+    notStarting:
+    cjne a, #SOAKSTART, notSoakStart
+        mov FlashReadAddr+2, #0x02
+	    mov FlashReadAddr+1, #0x6e
+	    mov FlashReadAddr+0, #0x23
+	    mov w+2, #0x00
+	    mov w+1, #0x52
+	    mov w+0, #0xb0
+        ljmp swFinish
+    notSoakStart:
+    cjne a, #SOAKFINISH, notSoakFinish
+        mov FlashReadAddr+2, #0x02
+	    mov FlashReadAddr+1, #0xc0
+	    mov FlashReadAddr+0, #0x7a
+	    mov w+2, #0x00
+	    mov w+1, #0x4b
+	    mov w+0, #0x9f
+        ljmp swFinish
+    notSoakFinish:
+    cjne a, #REFSTART, notReflowStart
+        mov FlashReadAddr+2, #0x03
+	    mov FlashReadAddr+1, #0x0b
+	    mov FlashReadAddr+0, #0xee
+	    mov w+2, #0x00
+	    mov w+1, #0x58
+	    mov w+0, #0xe3
+        ljmp swFinish
+    notReflowStart:
+    cjne a, #COOLINGL, notCooling
+        mov FlashReadAddr+2, #0x03
+	    mov FlashReadAddr+1, #0x65
+	    mov FlashReadAddr+0, #0x6c
+	    mov w+2, #0x00
+	    mov w+1, #0x2e
+	    mov w+0, #0x14
+        ljmp swFinish
+    notCooling:
+    cjne a, #SAFETT, notSafeToTouch
+        mov FlashReadAddr+2, #0x03
+	    mov FlashReadAddr+1, #0x93
+	    mov FlashReadAddr+0, #0x29
+	    mov w+2, #0x00
+	    mov w+1, #0x57
+	    mov w+0, #0x14
+        ljmp swFinish
+    notSafeToTouch:
+    cjne a, #DENISE, swFinish
+        mov FlashReadAddr+2, #0x03
+	    mov FlashReadAddr+1, #0xea
+	    mov FlashReadAddr+0, #0x3d
+	    mov w+2, #0x03
+	    mov w+1, #0x28
+	    mov w+0, #0xb3
     swFinish:
     setb SpeakerIsBusy
     setb SPEAKER_E
@@ -1031,6 +1038,49 @@ soundHandler:
             lcall playSound
             ret
         dCPlayed:
+
+        jnb ToBePlayedStarting, StartingPlayed 
+            clr ToBePlayedStarting   
+            mov a, #STARTING
+            lcall playSound
+            ret
+        StartingPlayed:
+        jnb ToBePlayedSoakStart, SoakStartPlayed   
+            clr ToBePlayedSoakStart   
+            mov a, #SOAKSTART
+            lcall playSound
+            ret
+        SoakStartPlayed:
+        jnb ToBePlayedSoakFinish, SoakFinishPlayed  
+            clr ToBePlayedSoakFinish
+            mov a, #SOAKFINISH
+            lcall playSound
+            ret
+        SoakFinishPlayed:
+        jnb ToBePlayedReflowStart, ReflowStartPlayed 
+            clr ToBePlayedReflowStart
+            mov a, #REFSTART
+            lcall playSound
+            ret
+        ReflowStartPlayed:
+        jnb ToBePlayedCooling, CoolingPlayed     
+            clr ToBePlayedCooling
+            mov a, #COOLINGL
+            lcall playSound
+            ret
+        CoolingPlayed:
+        jnb ToBePlayedSafe, SafePlayed        
+            clr ToBePlayedSafe
+            mov a, #SAFETT
+            lcall playSound
+            ret
+        SafePlayed:
+        jnb ToBePlayedDenise, DenisePlayed      
+            ; clr ToBePlayedDenise ; comment out to always loop until deactivated
+            mov a, #DENISE
+            lcall playSound
+            ret
+        DenisePlayed:
         clr SoundIsPlaying
 ret
 
@@ -1047,9 +1097,13 @@ start:
     Set_cursor(2, 1)
     Send_Constant_String(#Start_display_2)
 
+    setb SoundIsPlaying
+    setb ToBePlayedDenise
+
     startLoop:
         ifPressedJumpTo(STARTSTOP, selectProfile, 1)
         ifPressedJumpTo(RIGHT, selectProfile, 1)
+        lcall soundHandler
     ljmp startLoop
 ; end of start state
 
@@ -1059,6 +1113,11 @@ mov2BytesConstant mac
 endmac
 
 selectProfile:
+    clr ToBePlayedDenise
+    mov w+2, #0x00
+    mov w+1, #0x00
+    mov w+0, #0x00
+    
     ; display select message
     WriteCommand(#0x0e) ; show cursor, no blink
     Set_Cursor(1, 1)
@@ -1853,8 +1912,11 @@ Cancelled:
 
 debug:
     lcall setup
-    setb MaintainTargetTemp
-    setb RunTimeFlag
+    ; setb MaintainTargetTemp
+    ; setb RunTimeFlag
+    setb ToBePlayedDenise
+    setb SoundIsPlaying
+
     debugLoop:
 
         lcall ReadTemp
@@ -1863,22 +1925,13 @@ debug:
             ljmp no100ms
         L100ms:
             clr Flag100ms
-            clr EA
-            readADCChannel(7)
-            Load_y(200)
-            lcall mul32
-            Load_y(1023)
-            lcall div32
-            lcall hex2bcd
-            mov2Bytes(TargetTemp, x)
-            Set_Cursor(1,1)
-            LCDSend3BCD(bcd)
             Set_Cursor(2,1)
             LCDSend3BCD(OvenTempBCD)
-            setb EA
         no100ms:
 
         lcall soundHandler
+
+        Wait_Milli_Seconds(#100)
 
     ljmp debugLoop
 
