@@ -36,7 +36,7 @@ STARTING   equ 0xa2
 SOAKSTART  equ 0xa3
 SOAKFINISH equ 0xa4
 REFSTART   equ 0xa5
-COOLINGL    equ 0xa6
+COOLINGL   equ 0xa6
 SAFETT     equ 0xa7
 DENISE     equ 0xa8
 
@@ -1929,29 +1929,29 @@ Cancelled:
             ljmp start
     ljmp CancelledLoop
 
-debug:
-    lcall setup
-    ; setb MaintainTargetTemp
-    ; setb RunTimeFlag
-    setb ToBePlayedDenise
-    setb SoundIsPlaying
+; debug:
+;     lcall setup
+;     ; setb MaintainTargetTemp
+;     ; setb RunTimeFlag
+;     setb ToBePlayedDenise
+;     setb SoundIsPlaying
 
-    debugLoop:
+;     debugLoop:
 
-        lcall ReadTemp
+;         lcall ReadTemp
 
-        jb Flag100ms, L100ms
-            ljmp no100ms
-        L100ms:
-            clr Flag100ms
-            Set_Cursor(2,1)
-            LCDSend3BCD(OvenTempBCD)
-        no100ms:
+;         jb Flag100ms, L100ms
+;             ljmp no100ms
+;         L100ms:
+;             clr Flag100ms
+;             Set_Cursor(2,1)
+;             LCDSend3BCD(OvenTempBCD)
+;         no100ms:
 
-        lcall soundHandler
+;         lcall soundHandler
 
-        Wait_Milli_Seconds(#100)
+;         Wait_Milli_Seconds(#100)
 
-    ljmp debugLoop
+;     ljmp debugLoop
 
 END
