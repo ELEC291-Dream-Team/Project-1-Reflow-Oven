@@ -916,7 +916,61 @@ playSound:
 	    mov w+0, #0x6a
         ljmp swFinish
     notNine:
-    cjne a, #DEGREEC, swFinish
+    cjne a, #DEGREEC, starting_audio
+        mov FlashReadAddr+2, #0x01
+	    mov FlashReadAddr+1, #0xAE
+	    mov FlashReadAddr+0, #0xAA
+	    mov w+2, #0x00
+	    mov w+1, #0x81
+	    mov w+0, #0x33
+        ljmp swFinish
+    starting_audio:
+    cjne a, #DEGREEC, starting_audio
+        mov FlashReadAddr+2, #0x01
+	    mov FlashReadAddr+1, #0xAE
+	    mov FlashReadAddr+0, #0xAA
+	    mov w+2, #0x00
+	    mov w+1, #0x81
+	    mov w+0, #0x33
+        ljmp swFinish
+    soak_start_audio:
+    cjne a, #DEGREEC, soak_finish_audio
+        mov FlashReadAddr+2, #0x01
+	    mov FlashReadAddr+1, #0xAE
+	    mov FlashReadAddr+0, #0xAA
+	    mov w+2, #0x00
+	    mov w+1, #0x81
+	    mov w+0, #0x33
+        ljmp swFinish
+    soak_finish_audio:
+    cjne a, #DEGREEC, reflow_start_audio
+        mov FlashReadAddr+2, #0x01
+	    mov FlashReadAddr+1, #0xAE
+	    mov FlashReadAddr+0, #0xAA
+	    mov w+2, #0x00
+	    mov w+1, #0x81
+	    mov w+0, #0x33
+        ljmp swFinish
+    reflow_start_audio:
+    cjne a, #DEGREEC, cooling_audio
+        mov FlashReadAddr+2, #0x01
+	    mov FlashReadAddr+1, #0xAE
+	    mov FlashReadAddr+0, #0xAA
+	    mov w+2, #0x00
+	    mov w+1, #0x81
+	    mov w+0, #0x33
+        ljmp swFinish
+    cooling_audio:
+    cjne a, #DEGREEC, safe_to_touch_audio
+        mov FlashReadAddr+2, #0x01
+	    mov FlashReadAddr+1, #0xAE
+	    mov FlashReadAddr+0, #0xAA
+	    mov w+2, #0x00
+	    mov w+1, #0x81
+	    mov w+0, #0x33
+        ljmp swFinish
+    safe_to_touch_audio:
+    cjne a, #DEGREEC, safe_to_touch_audio
         mov FlashReadAddr+2, #0x01
 	    mov FlashReadAddr+1, #0xCF
 	    mov FlashReadAddr+0, #0xBD
