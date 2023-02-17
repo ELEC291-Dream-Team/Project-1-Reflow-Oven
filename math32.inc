@@ -530,7 +530,7 @@ div32_exit:
 	
 	ret
 
-Load_X MAC
+Load_x MAC
 	mov x+0, #low (%0 % 0x10000) 
 	mov x+1, #high(%0 % 0x10000) 
 	mov x+2, #low (%0 / 0x10000) 

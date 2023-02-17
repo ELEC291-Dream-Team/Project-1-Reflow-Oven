@@ -29,13 +29,13 @@ TIMER1_RELOAD  EQU 0x10000-(SYSCLK/TIMER1_RATE)
 BAUDRATE       EQU 115200
 BRG_VAL        EQU (0x100-(SYSCLK/(16*BAUDRATE)))
 
-SPEAKER  EQU P2.6 ; Used with a MOSFET to turn off speaker when not in use
+SPEAKER  EQU P2.4 ; Used with a MOSFET to turn off speaker when not in use
 
 ; The pins used for SPI
-FLASH_CE  EQU  P2.5
-MY_MOSI   EQU  P2.4 
-MY_MISO   EQU  P2.1
-MY_SCLK   EQU  P2.0 
+FLASH_CE  EQU  P3.5
+MY_MOSI   EQU  P3.3 
+MY_MISO   EQU  P3.4
+MY_SCLK   EQU  P3.2 
 
 ; Commands supported by the SPI flash memory according to the datasheet
 WRITE_ENABLE     EQU 0x06  ; Address:0 Dummy:0 Num:0
