@@ -1,6 +1,10 @@
 # Project 1: Reflow Oven Controller
 Project 1 of ELEC 291: Reflow Oven Controller - February 2023
 
+## Main Files
+- `src/controller.asm`
+- `src/graphtest2.py`
+
 ## Authors
 
 - [@CharlesSurianto](https://github.com/CharlesSurianto)
