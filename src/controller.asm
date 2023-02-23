@@ -620,22 +620,6 @@ ifPressedCall mac
     %1%0%2noPress:
 endmac
 
-Left_blank mac
-	mov a, %0
-	anl a, #0xf0
-	swap a
-	jz Left_blank_%M_a
-	ljmp %1
-    Left_blank_%M_a:
-	Display_char(#' ')
-	mov a, %0
-	anl a, #0x0f
-	jz Left_blank_%M_b
-	ljmp %1
-    Left_blank_%M_b:
-	Display_char(#' ')
-endmac
-
 writeByte mac
 	mov a, %0
 	movx @dptr, a
@@ -750,11 +734,6 @@ updateDisplayReflow:
         LCDSend3BCD(OvenTempBCD)
         Set_Cursor(2,11)
         LCDSend3BCD(RunTimeBCD)
-
-        ; Set_Cursor(1,1)
-        ; LCDSend3BCD(PWMDutyCycle)
-        ; LCDSend3BCD(TargetTemp)
-        ; LCDSend3BCD(OvenTemp)
     updateDisplayReflowDone:
 ret
 
@@ -819,17 +798,6 @@ setup:
     lcall hex2bcd
 
     lcall ReadTemp
-
-    ; custom degree C character
-    ; WriteCommand(#0x40)
-    ; WriteData(#0x18)
-    ; WriteData(#0x18)
-    ; WriteData(#0x03)
-    ; WriteData(#0x04)
-    ; WriteData(#0x04)
-    ; WriteData(#0x04)
-    ; WriteData(#0x03)
-    ; WriteData(#0x00)
 ret
 
 playSound:
