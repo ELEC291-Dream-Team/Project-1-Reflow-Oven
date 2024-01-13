@@ -2,8 +2,8 @@
 Project 1 of ELEC 291: Reflow Oven Controller - February 2023
 
 ## Main Files
-- `src/controller.asm`
-- `src/graphtest2.py`
+- [`src/controller.asm`](https://github.com/ELEC-291-Dream-Team/Project-1-Reflow-Oven/blob/main/src/controller.asm)
+- [`src/graphtest2.py`](https://github.com/ELEC-291-Dream-Team/Project-1-Reflow-Oven/blob/main/src/graphtest2.py)
 
 ## Authors
 
